@@ -1,0 +1,15 @@
+# Copy this file to terraform.tfvars and update with your values
+# DO NOT commit terraform.tfvars to git (it contains sensitive information)
+
+# AWS region where you want to deploy resources
+aws_region = "us-east-1"
+
+# S3 bucket name - must be globally unique
+# Include your name/initials to make it unique
+bucket_name = "easy-video-share-silmari-dev"
+
+# Environment (dev, staging, prod)
+environment = "dev"
+
+# Project name
+project_name = "easy-video-share" 
