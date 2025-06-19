@@ -197,7 +197,7 @@ resource "aws_dynamodb_table" "video_metadata" {
   }
 
   attribute {
-    name = "username"
+    name = "user_id"
     type = "S"
   }
 
@@ -206,10 +206,10 @@ resource "aws_dynamodb_table" "video_metadata" {
     type = "S"
   }
 
-  # Global Secondary Index for username queries
+  # Global Secondary Index for user_id queries
   global_secondary_index {
-    name            = "username-upload_date-index"
-    hash_key        = "username"
+    name            = "user_id-upload_date-index"
+    hash_key        = "user_id"
     range_key       = "upload_date"
     projection_type = "ALL"
   }
@@ -308,12 +308,7 @@ resource "aws_lambda_function" "video_metadata_api" {
 data "archive_file" "lambda_zip" {
   type        = "zip"
   output_path = "lambda_function.zip"
-  source {
-    content = templatefile("${path.module}/lambda/index.js", {
-      dynamodb_table = aws_dynamodb_table.video_metadata.name
-    })
-    filename = "index.js"
-  }
+  source_dir  = "${path.module}/lambda"
 }
 
 # API Gateway REST API
@@ -343,7 +338,8 @@ resource "aws_api_gateway_method" "videos_post" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.videos_resource.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
 # API Gateway method for GET (list videos)
@@ -351,7 +347,8 @@ resource "aws_api_gateway_method" "videos_get" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.videos_resource.id
   http_method   = "GET"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
 # API Gateway method for OPTIONS (CORS)
@@ -494,4 +491,81 @@ resource "aws_api_gateway_stage" "video_api_stage" {
     Environment = var.environment
     Project     = var.project_name
   }
+}
+
+# Cognito User Pool for authentication
+resource "aws_cognito_user_pool" "video_app_users" {
+  name = "${var.project_name}-users"
+
+  # Email as username
+  alias_attributes         = ["email"]
+  auto_verified_attributes = ["email"]
+
+  # Password policy (strong default)
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+    require_symbols   = true
+    require_uppercase = true
+  }
+
+  # Email verification settings
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+    email_subject        = "Easy Video Share - Verify your email"
+    email_message        = "Your verification code is {####}"
+  }
+
+  # Account recovery
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  tags = {
+    Name        = "Video App User Pool"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Cognito User Pool Client for frontend application
+resource "aws_cognito_user_pool_client" "video_app_client" {
+  name         = "${var.project_name}-client"
+  user_pool_id = aws_cognito_user_pool.video_app_users.id
+
+      # Authentication flows for web application
+    explicit_auth_flows = [
+      "ALLOW_USER_SRP_AUTH",
+      "ALLOW_USER_PASSWORD_AUTH",
+      "ALLOW_REFRESH_TOKEN_AUTH"
+    ]
+
+  # Token configuration
+  access_token_validity  = 1    # 1 hour
+  id_token_validity     = 1    # 1 hour
+  refresh_token_validity = 30   # 30 days
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+
+  # Prevent secret generation (not needed for web apps)
+  generate_secret = false
+
+  # Allowed OAuth flows (for future expansion)
+  supported_identity_providers = ["COGNITO"]
+}
+
+# API Gateway Cognito Authorizer
+resource "aws_api_gateway_authorizer" "cognito_authorizer" {
+  name          = "${var.project_name}-cognito-auth"
+  type          = "COGNITO_USER_POOLS"
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  provider_arns = [aws_cognito_user_pool.video_app_users.arn]
 } 

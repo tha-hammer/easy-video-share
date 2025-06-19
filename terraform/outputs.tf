@@ -49,6 +49,27 @@ output "api_videos_endpoint" {
   value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/videos"
 }
 
+# Cognito Configuration
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  value       = aws_cognito_user_pool.video_app_users.id
+}
+
+output "cognito_user_pool_client_id" {
+  description = "Cognito User Pool Client ID"
+  value       = aws_cognito_user_pool_client.video_app_client.id
+}
+
+output "cognito_user_pool_domain" {
+  description = "Cognito User Pool Domain"
+  value       = aws_cognito_user_pool.video_app_users.domain
+}
+
+output "cognito_region" {
+  description = "AWS region for Cognito"
+  value       = var.aws_region
+}
+
 output "aws_region" {
   description = "AWS region where resources are created"
   value       = var.aws_region

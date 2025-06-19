@@ -32,24 +32,44 @@ exports.handler = async (event) => {
       return createResponse(200, { message: "CORS preflight" });
     }
 
+    // Extract user ID from Cognito JWT token
+    let userId = null;
+    if (event.requestContext && event.requestContext.authorizer) {
+      // Cognito puts user info in the authorizer context
+      const claims = event.requestContext.authorizer.claims;
+      userId = claims.sub; // 'sub' is the unique user ID in Cognito
+      console.log("Authenticated user:", userId);
+    }
+
     // Handle POST - Create video metadata
     if (httpMethod === "POST") {
-      const body = JSON.parse(event.body || "{}");
-      
-      // Validate required fields
-      if (!body.username || !body.title || !body.filename || !body.bucketLocation) {
-        return createResponse(400, {
-          error: "Missing required fields: username, title, filename, bucketLocation"
+      // Check if user is authenticated
+      if (!userId) {
+        return createResponse(401, {
+          error: "Authentication required"
         });
       }
 
-      // Generate unique video ID
-      const videoId = `${body.username}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const body = JSON.parse(event.body || "{}");
+      
+      // Validate required fields (username no longer required - comes from JWT)
+      if (!body.title || !body.filename || !body.bucketLocation) {
+        return createResponse(400, {
+          error: "Missing required fields: title, filename, bucketLocation"
+        });
+      }
+
+      // Generate unique video ID using user ID
+      const videoId = `${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Get user email from JWT claims for display purposes
+      const userEmail = event.requestContext.authorizer.claims.email;
       
       // Create metadata record
       const videoMetadata = {
         video_id: videoId,
-        username: body.username.toLowerCase().trim(),
+        user_id: userId,
+        user_email: userEmail, // For display purposes
         title: body.title.trim(),
         filename: body.filename,
         bucket_location: body.bucketLocation,
@@ -77,39 +97,28 @@ exports.handler = async (event) => {
       });
     }
 
-    // Handle GET - List videos (with optional username filter)
+    // Handle GET - List videos (for authenticated user only)
     if (httpMethod === "GET") {
-      const queryParams = event.queryStringParameters || {};
-      const username = queryParams.username;
-
-      let videos = [];
-
-      if (username) {
-        // Query videos by username using GSI
-        const queryCommand = new QueryCommand({
-          TableName: tableName,
-          IndexName: "username-upload_date-index",
-          KeyConditionExpression: "username = :username",
-          ExpressionAttributeValues: {
-            ":username": username.toLowerCase().trim()
-          },
-          ScanIndexForward: false // Sort by upload_date descending (newest first)
+      // Check if user is authenticated
+      if (!userId) {
+        return createResponse(401, {
+          error: "Authentication required"
         });
-        
-        const result = await docClient.send(queryCommand);
-        videos = result.Items || [];
-      } else {
-        // Scan all videos (for development - consider pagination for production)
-        const scanCommand = new ScanCommand({
-          TableName: tableName
-        });
-        
-        const result = await docClient.send(scanCommand);
-        videos = result.Items || [];
-        
-        // Sort by upload_date descending
-        videos.sort((a, b) => new Date(b.upload_date) - new Date(a.upload_date));
       }
+
+      // Query videos by user_id using GSI (we'll need to update the GSI)
+      const queryCommand = new QueryCommand({
+        TableName: tableName,
+        IndexName: "user_id-upload_date-index",
+        KeyConditionExpression: "user_id = :userId",
+        ExpressionAttributeValues: {
+          ":userId": userId
+        },
+        ScanIndexForward: false // Sort by upload_date descending (newest first)
+      });
+      
+      const result = await docClient.send(queryCommand);
+      const videos = result.Items || [];
 
       return createResponse(200, {
         success: true,
