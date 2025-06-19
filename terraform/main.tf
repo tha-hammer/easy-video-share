@@ -93,6 +93,12 @@ resource "aws_s3_bucket_website_configuration" "video_bucket_website" {
   }
 }
 
+# Enable S3 Transfer Acceleration for faster uploads
+resource "aws_s3_bucket_accelerate_configuration" "video_bucket_accelerate" {
+  bucket = aws_s3_bucket.video_bucket.id
+  status = "Enabled"
+}
+
 # Configure CORS for browser uploads
 resource "aws_s3_bucket_cors_configuration" "video_bucket_cors" {
   bucket = aws_s3_bucket.video_bucket.id

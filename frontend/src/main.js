@@ -1,16 +1,41 @@
 import './style.css'
-import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { 
+  S3Client, 
+  ListObjectsV2Command, 
+  GetObjectCommand, 
+  PutObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { AWS_CONFIG, UPLOAD_CONFIG } from './config.js'
 
-// Initialize S3 client
-const s3Client = new S3Client({
+// Initialize S3 client with optional transfer acceleration
+let s3Client = new S3Client({
   region: AWS_CONFIG.region,
-  credentials: AWS_CONFIG.credentials
+  credentials: AWS_CONFIG.credentials,
+  useAccelerateEndpoint: UPLOAD_CONFIG.useTransferAcceleration
+})
+
+// Fallback S3 client without acceleration for DNS issues
+const s3ClientFallback = new S3Client({
+  region: AWS_CONFIG.region,
+  credentials: AWS_CONFIG.credentials,
+  useAccelerateEndpoint: false
 })
 
 // Global variables
 let videos = []
+let currentUploadXHR = null
+let uploadStartTime = null
+let lastProgressTime = null
+let lastProgressBytes = 0
+let currentMultipartUpload = null
+let uploadedParts = []
+let chunkProgress = new Map() // Track individual chunk progress
+let lastProgressUpdate = 0 // Throttle progress updates
 
 // Main application HTML
 document.querySelector('#app').innerHTML = `
@@ -54,11 +79,26 @@ document.querySelector('#app').innerHTML = `
             <div id="upload-spinner" class="spinner hidden"></div>
           </button>
           
-          <div id="upload-progress" class="progress-container hidden">
+          <div id="upload-progress" class="progress-container enhanced hidden">
+            <div class="progress-header">
+              <span class="progress-title">Uploading: <span id="progress-filename"></span></span>
+              <span id="progress-percentage">0%</span>
+            </div>
+            
             <div class="progress-bar">
               <div id="progress-fill" class="progress-fill"></div>
             </div>
-            <span id="progress-text">0%</span>
+            
+            <div class="progress-stats">
+              <span id="progress-bytes">0 MB / 0 MB</span>
+              <span id="progress-speed">0 MB/s</span>
+              <span id="progress-eta">--:--</span>
+            </div>
+            
+            <div class="progress-actions">
+              <button type="button" id="pause-btn" class="progress-btn">⏸️ Pause</button>
+              <button type="button" id="cancel-btn" class="progress-btn">❌ Cancel</button>
+            </div>
           </div>
         </form>
         
@@ -101,6 +141,13 @@ function setupEventListeners() {
   // File input validation
   const fileInput = document.getElementById('video-file')
   fileInput.addEventListener('change', validateFile)
+
+  // Upload control buttons
+  const pauseBtn = document.getElementById('pause-btn')
+  const cancelBtn = document.getElementById('cancel-btn')
+  
+  pauseBtn.addEventListener('click', pauseUpload)
+  cancelBtn.addEventListener('click', cancelUpload)
 
   // Modal controls
   const modal = document.getElementById('video-modal')
@@ -162,9 +209,14 @@ async function handleUpload(event) {
     const fileName = `${timestamp}-${title.replace(/[^a-zA-Z0-9]/g, '-')}.${fileExtension}`
     const videoKey = `videos/${fileName}`
     
-    // Upload video using presigned URL (more browser-compatible)
+    // Choose upload method based on file size
     showStatus('info', 'Uploading video...')
-    await uploadWithPresignedUrl(file, videoKey)
+    if (file.size > UPLOAD_CONFIG.multipartThreshold) {
+      showStatus('info', `Large file detected (${(file.size / 1024 / 1024).toFixed(1)}MB). Using multipart upload for faster transfer...`)
+      await uploadWithMultipart(file, videoKey)
+    } else {
+      await uploadWithPresignedUrl(file, videoKey)
+    }
     
     // Create and upload metadata
     showStatus('info', 'Saving metadata...')
@@ -212,22 +264,267 @@ async function uploadWithPresignedUrl(file, key) {
     
     const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
     
-    // Upload using fetch with presigned URL
-    const response = await fetch(presignedUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type
+    // Reset progress tracking variables
+    uploadStartTime = null
+    lastProgressTime = null
+    lastProgressBytes = 0
+    
+    // Set filename in progress display
+    document.getElementById('progress-filename').textContent = file.name
+    
+    // Upload using XMLHttpRequest for progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      currentUploadXHR = xhr
+      
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100)
+          updateProgress(percentComplete, event.loaded, event.total)
+        }
+      })
+      
+      xhr.addEventListener('load', () => {
+        currentUploadXHR = null
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr)
+        } else {
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`))
+        }
+      })
+      
+      xhr.addEventListener('error', () => {
+        currentUploadXHR = null
+        reject(new Error('Network error during upload'))
+      })
+      
+      xhr.addEventListener('abort', () => {
+        currentUploadXHR = null
+        reject(new Error('Upload aborted'))
+      })
+      
+      xhr.open('PUT', presignedUrl)
+      xhr.setRequestHeader('Content-Type', file.type)
+      xhr.send(file)
+    })
+    
+  } catch (error) {
+    currentUploadXHR = null
+    
+    // Check if it's a DNS/network error and we should try fallback
+    if (error.message.includes('Network error') && UPLOAD_CONFIG.useTransferAcceleration) {
+      console.warn('Transfer acceleration failed for single upload, falling back to standard endpoint...')
+      showStatus('info', 'Retrying with standard S3 endpoint...')
+      
+      // Switch to fallback client and retry
+      s3Client = s3ClientFallback
+      UPLOAD_CONFIG.useTransferAcceleration = false
+      
+      try {
+        return await uploadWithPresignedUrl(file, key)
+      } catch (retryError) {
+        throw new Error(`Failed to upload video: ${retryError.message}`)
+      }
+    }
+    
+    throw new Error(`Failed to upload video: ${error.message}`)
+  }
+}
+
+async function uploadWithMultipart(file, key) {
+  let uploadId = null
+  
+  try {
+    // Reset progress tracking variables
+    uploadStartTime = null
+    lastProgressTime = null
+    lastProgressBytes = 0
+    uploadedParts = []
+    chunkProgress.clear()
+    
+    // Set filename in progress display
+    document.getElementById('progress-filename').textContent = file.name
+    
+    // Create multipart upload
+    const createCommand = new CreateMultipartUploadCommand({
+      Bucket: AWS_CONFIG.bucketName,
+      Key: key,
+      ContentType: file.type,
+      Metadata: {
+        'original-name': file.name,
+        'upload-timestamp': new Date().toISOString()
       }
     })
     
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`)
+    const createResponse = await s3Client.send(createCommand)
+    uploadId = createResponse.UploadId
+    currentMultipartUpload = { uploadId, key }
+    
+    // Calculate chunks
+    const chunkSize = UPLOAD_CONFIG.chunkSize
+    const totalChunks = Math.ceil(file.size / chunkSize)
+    
+    showStatus('info', `Uploading ${totalChunks} chunks in parallel...`)
+    
+    // Upload chunks in batches to avoid overwhelming the connection
+    const batchSize = UPLOAD_CONFIG.maxConcurrentUploads
+    let totalUploaded = 0
+    
+    for (let batchStart = 0; batchStart < totalChunks; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, totalChunks)
+      const batchPromises = []
+      
+      for (let chunkIndex = batchStart; chunkIndex < batchEnd; chunkIndex++) {
+        const start = chunkIndex * chunkSize
+        const end = Math.min(start + chunkSize, file.size)
+        const chunk = file.slice(start, end)
+        
+        batchPromises.push(uploadChunkWithProgress(chunk, key, uploadId, chunkIndex + 1, start, file.size, totalChunks))
+      }
+      
+      // Wait for this batch to complete
+      const batchResults = await Promise.all(batchPromises)
+      uploadedParts.push(...batchResults)
+      
+      // Update overall progress
+      totalUploaded += batchResults.reduce((sum, result) => sum + result.size, 0)
+      const overallProgress = Math.round((totalUploaded / file.size) * 100)
+      updateMultipartProgress(overallProgress, totalUploaded, file.size, batchEnd, totalChunks)
     }
     
-    return response
+    // Sort parts by part number (required by S3)
+    uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber)
+    
+    // Complete multipart upload
+    showStatus('info', 'Finalizing upload...')
+    const completeCommand = new CompleteMultipartUploadCommand({
+      Bucket: AWS_CONFIG.bucketName,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: uploadedParts.map(part => ({
+          ETag: part.ETag,
+          PartNumber: part.PartNumber
+        }))
+      }
+    })
+    
+    const result = await s3Client.send(completeCommand)
+    currentMultipartUpload = null
+    return result
+    
   } catch (error) {
-    throw new Error(`Failed to upload video: ${error.message}`)
+    // Check if it's a DNS/network error and we should try fallback
+    if (error.message.includes('Network error') && UPLOAD_CONFIG.useTransferAcceleration) {
+      console.warn('Transfer acceleration failed, falling back to standard endpoint...')
+      showStatus('info', 'Retrying with standard S3 endpoint...')
+      
+      // Switch to fallback client and retry
+      s3Client = s3ClientFallback
+      UPLOAD_CONFIG.useTransferAcceleration = false
+      
+      // Retry the upload with fallback client
+      try {
+        return await uploadWithMultipart(file, key)
+      } catch (retryError) {
+        error = retryError // Use the retry error if fallback also fails
+      }
+    }
+    
+    // Abort multipart upload on error
+    if (uploadId) {
+      try {
+        const abortCommand = new AbortMultipartUploadCommand({
+          Bucket: AWS_CONFIG.bucketName,
+          Key: key,
+          UploadId: uploadId
+        })
+        await s3Client.send(abortCommand)
+      } catch (abortError) {
+        console.error('Failed to abort multipart upload:', abortError)
+      }
+    }
+    
+    currentMultipartUpload = null
+    throw new Error(`Multipart upload failed: ${error.message}`)
+  }
+}
+
+async function uploadChunkWithProgress(chunk, key, uploadId, partNumber, startByte, totalFileSize, totalChunks) {
+  try {
+    // Create presigned URL for this chunk
+    const command = new UploadPartCommand({
+      Bucket: AWS_CONFIG.bucketName,
+      Key: key,
+      UploadId: uploadId,
+      PartNumber: partNumber
+    })
+    
+    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
+    
+    // Upload chunk using XMLHttpRequest for better browser compatibility
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      let chunkStartTime = Date.now()
+      
+      // Track individual chunk progress (throttled)
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          // Store this chunk's progress
+          chunkProgress.set(partNumber, {
+            loaded: event.loaded,
+            total: event.total,
+            startByte: startByte
+          })
+          
+          // Only update UI every 500ms to avoid performance impact
+          const now = Date.now()
+          if (now - lastProgressUpdate > 500) {
+            updateAggregatedProgress(totalFileSize, totalChunks)
+            lastProgressUpdate = now
+          }
+        }
+      })
+      
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Extract ETag from response headers
+          const etag = xhr.getResponseHeader('ETag')
+          if (!etag) {
+            reject(new Error(`No ETag received for part ${partNumber}`))
+            return
+          }
+          
+          // Remove completed chunk from progress tracking
+          chunkProgress.delete(partNumber)
+          
+          resolve({
+            ETag: etag,
+            PartNumber: partNumber,
+            size: chunk.size,
+            uploadTime: Date.now() - chunkStartTime
+          })
+        } else {
+          reject(new Error(`Upload failed for part ${partNumber}: ${xhr.status} ${xhr.statusText}`))
+        }
+      })
+      
+      xhr.addEventListener('error', () => {
+        reject(new Error(`Network error uploading part ${partNumber}`))
+      })
+      
+      xhr.addEventListener('abort', () => {
+        reject(new Error(`Upload aborted for part ${partNumber}`))
+      })
+      
+      xhr.open('PUT', presignedUrl)
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+      xhr.send(chunk)
+    })
+    
+  } catch (error) {
+    throw new Error(`Failed to upload chunk ${partNumber}: ${error.message}`)
   }
 }
 
@@ -378,6 +675,183 @@ function closeModal() {
   modal.classList.add('hidden')
 }
 
+function updateProgress(percentage, loaded, total) {
+  const now = Date.now()
+  
+  // Initialize timing on first progress event
+  if (!uploadStartTime) {
+    uploadStartTime = now
+    lastProgressTime = now
+    lastProgressBytes = loaded
+  }
+  
+  // Update progress bar and percentage
+  document.getElementById('progress-fill').style.width = `${percentage}%`
+  document.getElementById('progress-percentage').textContent = `${percentage}%`
+  
+  // Update bytes transferred
+  const loadedMB = (loaded / 1024 / 1024).toFixed(1)
+  const totalMB = (total / 1024 / 1024).toFixed(1)
+  document.getElementById('progress-bytes').textContent = `${loadedMB} MB / ${totalMB} MB`
+  
+  // Calculate and display upload speed every second
+  const timeDiff = (now - lastProgressTime) / 1000 // seconds
+  if (timeDiff >= 1) {
+    const bytesDiff = loaded - lastProgressBytes
+    const speedBytesPerSecond = bytesDiff / timeDiff
+    const speedMBPerSecond = (speedBytesPerSecond / 1024 / 1024).toFixed(1)
+    
+    document.getElementById('progress-speed').textContent = `${speedMBPerSecond} MB/s`
+    
+    // Calculate ETA
+    if (speedBytesPerSecond > 0) {
+      const remainingBytes = total - loaded
+      const etaSeconds = Math.round(remainingBytes / speedBytesPerSecond)
+      const etaMinutes = Math.floor(etaSeconds / 60)
+      const etaSecondsRemainder = etaSeconds % 60
+      const etaDisplay = `${etaMinutes}:${etaSecondsRemainder.toString().padStart(2, '0')}`
+      document.getElementById('progress-eta').textContent = etaDisplay
+    }
+    
+    lastProgressTime = now
+    lastProgressBytes = loaded
+  }
+}
+
+function updateMultipartProgress(percentage, loaded, total, completedChunks, totalChunks) {
+  const now = Date.now()
+  
+  // Initialize timing on first progress event
+  if (!uploadStartTime) {
+    uploadStartTime = now
+    lastProgressTime = now
+    lastProgressBytes = 0
+  }
+  
+  // Update progress bar and percentage
+  document.getElementById('progress-fill').style.width = `${percentage}%`
+  document.getElementById('progress-percentage').textContent = `${percentage}% (${completedChunks}/${totalChunks} chunks)`
+  
+  // Update bytes transferred
+  const loadedMB = (loaded / 1024 / 1024).toFixed(1)
+  const totalMB = (total / 1024 / 1024).toFixed(1)
+  document.getElementById('progress-bytes').textContent = `${loadedMB} MB / ${totalMB} MB`
+  
+  // Calculate and display upload speed
+  const totalTime = (now - uploadStartTime) / 1000 // total seconds since start
+  if (totalTime > 0) {
+    const averageSpeedBytesPerSecond = loaded / totalTime
+    const speedMBPerSecond = (averageSpeedBytesPerSecond / 1024 / 1024).toFixed(1)
+    
+    document.getElementById('progress-speed').textContent = `${speedMBPerSecond} MB/s (avg)`
+    
+    // Calculate ETA based on average speed
+    if (averageSpeedBytesPerSecond > 0) {
+      const remainingBytes = total - loaded
+      const etaSeconds = Math.round(remainingBytes / averageSpeedBytesPerSecond)
+      const etaMinutes = Math.floor(etaSeconds / 60)
+      const etaSecondsRemainder = etaSeconds % 60
+      const etaDisplay = `${etaMinutes}:${etaSecondsRemainder.toString().padStart(2, '0')}`
+      document.getElementById('progress-eta').textContent = etaDisplay
+    }
+  }
+}
+
+function updateAggregatedProgress(totalFileSize, totalChunks) {
+  const now = Date.now()
+  
+  // Initialize timing on first progress event
+  if (!uploadStartTime) {
+    uploadStartTime = now
+    lastProgressTime = now
+    lastProgressBytes = 0
+  }
+  
+  // Calculate total bytes uploaded across all active chunks
+  let totalBytesUploaded = 0
+  let activeChunks = 0
+  let completedChunks = 0
+  
+  for (const [chunkNum, progress] of chunkProgress.entries()) {
+    totalBytesUploaded += progress.loaded
+    activeChunks++
+    
+    if (progress.loaded === progress.total) {
+      completedChunks++
+    }
+  }
+  
+  // Calculate overall progress percentage
+  const overallProgress = Math.round((totalBytesUploaded / totalFileSize) * 100)
+  
+  // Update progress bar and percentage
+  document.getElementById('progress-fill').style.width = `${overallProgress}%`
+  document.getElementById('progress-percentage').textContent = `${overallProgress}% (${activeChunks} active chunks)`
+  
+  // Update bytes transferred
+  const loadedMB = (totalBytesUploaded / 1024 / 1024).toFixed(1)
+  const totalMB = (totalFileSize / 1024 / 1024).toFixed(1)
+  document.getElementById('progress-bytes').textContent = `${loadedMB} MB / ${totalMB} MB`
+  
+  // Calculate and display upload speed
+  const totalTime = (now - uploadStartTime) / 1000 // total seconds since start
+  if (totalTime > 0) {
+    const averageSpeedBytesPerSecond = totalBytesUploaded / totalTime
+    const speedMBPerSecond = (averageSpeedBytesPerSecond / 1024 / 1024).toFixed(1)
+    
+    document.getElementById('progress-speed').textContent = `${speedMBPerSecond} MB/s`
+    
+    // Calculate ETA based on average speed
+    if (averageSpeedBytesPerSecond > 0) {
+      const remainingBytes = totalFileSize - totalBytesUploaded
+      const etaSeconds = Math.round(remainingBytes / averageSpeedBytesPerSecond)
+      const etaMinutes = Math.floor(etaSeconds / 60)
+      const etaSecondsRemainder = etaSeconds % 60
+      const etaDisplay = `${etaMinutes}:${etaSecondsRemainder.toString().padStart(2, '0')}`
+      document.getElementById('progress-eta').textContent = etaDisplay
+    }
+  }
+}
+
+async function pauseUpload() {
+  if (currentUploadXHR) {
+    currentUploadXHR.abort()
+    showStatus('info', 'Upload paused')
+  } else if (currentMultipartUpload) {
+    // For multipart uploads, we'll abort the current upload
+    // In a more advanced implementation, you could save progress and resume later
+    await cancelUpload()
+  }
+}
+
+async function cancelUpload() {
+  if (currentUploadXHR) {
+    currentUploadXHR.abort()
+    setUploadState(false)
+    showStatus('error', 'Upload cancelled')
+  } else if (currentMultipartUpload) {
+    try {
+      showStatus('info', 'Cancelling multipart upload...')
+      
+      const abortCommand = new AbortMultipartUploadCommand({
+        Bucket: AWS_CONFIG.bucketName,
+        Key: currentMultipartUpload.key,
+        UploadId: currentMultipartUpload.uploadId
+      })
+      
+      await s3Client.send(abortCommand)
+      currentMultipartUpload = null
+      uploadedParts = []
+      chunkProgress.clear()
+      setUploadState(false)
+      showStatus('error', 'Upload cancelled')
+    } catch (error) {
+      console.error('Error cancelling multipart upload:', error)
+      showStatus('error', `Failed to cancel upload: ${error.message}`)
+    }
+  }
+}
+
 function setUploadState(isUploading) {
   const uploadBtn = document.getElementById('upload-btn')
   const uploadText = document.getElementById('upload-text')
@@ -390,10 +864,27 @@ function setUploadState(isUploading) {
     uploadText.textContent = 'Uploading...'
     uploadSpinner.classList.remove('hidden')
     progressContainer.classList.remove('hidden')
+    
+    // Reset progress display
+    document.getElementById('progress-fill').style.width = '0%'
+    document.getElementById('progress-percentage').textContent = '0%'
+    document.getElementById('progress-bytes').textContent = '0 MB / 0 MB'
+    document.getElementById('progress-speed').textContent = '0 MB/s'
+    document.getElementById('progress-eta').textContent = '--:--'
   } else {
     uploadText.textContent = 'Upload Video'
     uploadSpinner.classList.add('hidden')
     progressContainer.classList.add('hidden')
+    
+    // Clear progress tracking
+    currentUploadXHR = null
+    currentMultipartUpload = null
+    uploadedParts = []
+    chunkProgress.clear()
+    lastProgressUpdate = 0
+    uploadStartTime = null
+    lastProgressTime = null
+    lastProgressBytes = 0
   }
 }
 
