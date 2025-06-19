@@ -15,5 +15,11 @@ export const AWS_CONFIG = {
 export const UPLOAD_CONFIG = {
   maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB in bytes
   allowedTypes: ['video/mp4', 'video/mov', 'video/avi', 'video/webm', 'video/quicktime'],
-  allowedExtensions: ['.mp4', '.mov', '.avi', '.webm']
+  allowedExtensions: ['.mp4', '.mov', '.avi', '.webm'],
+  
+  // Multipart upload settings optimized for high bandwidth
+  multipartThreshold: 200 * 1024 * 1024, // Use multipart for files > 200MB (higher threshold)
+  chunkSize: 50 * 1024 * 1024, // 50MB chunks (much larger for better throughput)
+  maxConcurrentUploads: 6, // More parallel uploads for high bandwidth
+  useTransferAcceleration: false // Disabled due to DNS resolution issues
 } 
