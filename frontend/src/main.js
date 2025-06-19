@@ -10,7 +10,7 @@ import {
   AbortMultipartUploadCommand
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { AWS_CONFIG, UPLOAD_CONFIG } from './config.js'
+import { AWS_CONFIG, UPLOAD_CONFIG, API_CONFIG } from './config.js'
 
 // Initialize S3 client with optional transfer acceleration
 let s3Client = new S3Client({
@@ -50,6 +50,20 @@ document.querySelector('#app').innerHTML = `
       <section class="upload-section">
         <h2>Upload Video</h2>
         <form id="upload-form" class="upload-form">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input 
+              type="text" 
+              id="username" 
+              name="username" 
+              required 
+              maxlength="50" 
+              placeholder="Enter your username..."
+              pattern="[a-zA-Z0-9_-]+"
+              title="Username can only contain letters, numbers, hyphens, and underscores"
+            />
+          </div>
+
           <div class="form-group">
             <label for="video-title">Video Title</label>
             <input 
@@ -191,11 +205,19 @@ async function handleUpload(event) {
   
   const form = event.target
   const formData = new FormData(form)
+  const username = formData.get('username').trim()
   const title = formData.get('title').trim()
   const file = formData.get('videoFile')
   
-  if (!title || !file) {
+  if (!username || !title || !file) {
     showStatus('error', 'Please fill in all fields')
+    return
+  }
+
+  // Validate username format
+  const usernamePattern = /^[a-zA-Z0-9_-]+$/
+  if (!usernamePattern.test(username)) {
+    showStatus('error', 'Username can only contain letters, numbers, hyphens, and underscores')
     return
   }
   
@@ -218,7 +240,7 @@ async function handleUpload(event) {
       await uploadWithPresignedUrl(file, videoKey)
     }
     
-    // Create and upload metadata
+    // Create and upload metadata to S3
     showStatus('info', 'Saving metadata...')
     const metadata = {
       title: title,
@@ -232,6 +254,17 @@ async function handleUpload(event) {
     
     const metadataKey = `metadata/${fileName.replace(/\.[^/.]+$/, '')}.json`
     await uploadMetadata(metadata, metadataKey)
+    
+    // Save metadata to DynamoDB via API
+    showStatus('info', 'Saving to database...')
+    await saveVideoMetadataToAPI({
+      username: username,
+      title: title,
+      filename: fileName,
+      bucketLocation: videoKey,
+      fileSize: file.size,
+      contentType: file.type
+    })
     
     showStatus('success', `Video "${title}" uploaded successfully!`)
     form.reset()
@@ -561,7 +594,87 @@ async function uploadMetadata(metadata, key) {
   }
 }
 
-async function loadVideos() {
+// API functions for DynamoDB integration
+async function saveVideoMetadataToAPI(videoData) {
+  try {
+    const response = await fetch(API_CONFIG.videosEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(videoData)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    console.log('Video metadata saved to database:', result)
+    return result
+  } catch (error) {
+    console.error('Failed to save metadata to API:', error)
+    throw new Error(`Failed to save to database: ${error.message}`)
+  }
+}
+
+async function loadVideosFromAPI(username = null) {
+  try {
+    let url = API_CONFIG.videosEndpoint
+    if (username) {
+      url += `?username=${encodeURIComponent(username)}`
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    return result.videos || []
+  } catch (error) {
+    console.error('Failed to load videos from API:', error)
+    // Fall back to S3 method if API fails
+    console.log('Falling back to S3 metadata loading...')
+    return await loadVideosFromS3()
+  }
+}
+
+async function loadVideos(username = null) {
+  try {
+    // Try to load from API first
+    const apiVideos = await loadVideosFromAPI(username)
+    
+    // Transform API response to match existing format
+    videos = apiVideos.map(video => ({
+      title: video.title,
+      filename: video.filename,
+      uploadDate: video.upload_date,
+      fileSize: video.file_size,
+      contentType: video.content_type,
+      videoUrl: `https://${AWS_CONFIG.bucketName}.s3.amazonaws.com/${video.bucket_location}`,
+      username: video.username
+    }))
+    
+    displayVideoList(videos)
+    
+  } catch (error) {
+    console.error('Error loading videos:', error)
+    document.getElementById('video-list').innerHTML = `
+      <div class="error">Error loading videos: ${error.message}</div>
+    `
+  }
+}
+
+async function loadVideosFromS3() {
   try {
     const listCommand = new ListObjectsV2Command({
       Bucket: AWS_CONFIG.bucketName,
@@ -572,8 +685,7 @@ async function loadVideos() {
     const response = await s3Client.send(listCommand)
     
     if (!response.Contents || response.Contents.length === 0) {
-      displayVideoList([])
-      return
+      return []
     }
     
     // Filter out directories and fetch metadata for each video file
@@ -607,18 +719,16 @@ async function loadVideos() {
     })
     
     const videoMetadata = await Promise.all(videoPromises)
-    videos = videoMetadata.filter(video => video !== null)
+    const filteredVideos = videoMetadata.filter(video => video !== null)
     
     // Sort by upload date (newest first)
-    videos.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate))
+    filteredVideos.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate))
     
-    displayVideoList(videos)
+    return filteredVideos
     
   } catch (error) {
-    console.error('Error loading videos:', error)
-    document.getElementById('video-list').innerHTML = `
-      <div class="error">Error loading videos: ${error.message}</div>
-    `
+    console.error('Error loading videos from S3:', error)
+    throw error
   }
 }
 
@@ -640,6 +750,7 @@ function displayVideoList(videoList) {
       <div class="video-info">
         <h3 class="video-title">${video.title}</h3>
         <div class="video-meta">
+          <span class="username">👤 ${video.username || 'Unknown'}</span>
           <span class="upload-date">${new Date(video.uploadDate).toLocaleDateString()}</span>
           <span class="file-size">${(video.fileSize / 1024 / 1024).toFixed(2)} MB</span>
         </div>

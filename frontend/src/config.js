@@ -11,6 +11,12 @@ export const AWS_CONFIG = {
   }
 }
 
+// API Configuration
+export const API_CONFIG = {
+  baseUrl: import.meta.env.VITE_API_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev',
+  videosEndpoint: import.meta.env.VITE_API_VIDEOS_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/videos'
+}
+
 // File upload constraints
 export const UPLOAD_CONFIG = {
   maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB in bytes
