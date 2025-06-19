@@ -34,6 +34,21 @@ output "app_user_secret_access_key" {
   sensitive   = true
 }
 
+output "dynamodb_table_name" {
+  description = "Name of the DynamoDB table for video metadata"
+  value       = aws_dynamodb_table.video_metadata.name
+}
+
+output "api_gateway_endpoint" {
+  description = "API Gateway endpoint URL"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}"
+}
+
+output "api_videos_endpoint" {
+  description = "Full API endpoint for video operations"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/videos"
+}
+
 output "aws_region" {
   description = "AWS region where resources are created"
   value       = var.aws_region

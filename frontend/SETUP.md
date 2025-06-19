@@ -2,7 +2,8 @@
 
 ## Prerequisites
 - Node.js (v16 or higher)
-- AWS credentials from your deployed infrastructure
+- AWS credentials from your deployed infrastructure  
+- Deployed Terraform infrastructure (including DynamoDB and API Gateway)
 
 ## 1. Get Your AWS Credentials
 
@@ -13,6 +14,7 @@ cd ../terraform
 terraform output bucket_name
 terraform output app_user_access_key_id
 terraform output app_user_secret_access_key
+terraform output api_videos_endpoint
 ```
 
 ## 2. Configure AWS Credentials
@@ -74,12 +76,21 @@ The application will be available at `http://localhost:5173`
 ## 5. Test Upload Functionality
 
 1. Open the application in your browser
-2. Enter a video title
-3. Select a video file (max 100MB, formats: MP4, MOV, AVI, WebM)
-4. Click "Upload Video"
-5. Wait for upload completion
-6. Video should appear in the list below
-7. Click "Play" to test video playback
+2. **Enter a username** (new field - required for tracking)
+3. Enter a video title
+4. Select a video file (max 2GB, formats: MP4, MOV, AVI, WebM)
+5. Click "Upload Video"
+6. Wait for upload completion
+7. Video metadata is saved to DynamoDB via API
+8. Video should appear in the list below with username
+9. Click "Play" to test video playback
+
+### New Features in This Version
+
+- **User Tracking**: Each upload now requires a username
+- **Database Storage**: Video metadata is stored in DynamoDB for better querying
+- **API Integration**: RESTful API handles video metadata operations
+- **Enhanced Display**: Video list now shows who uploaded each video
 
 ## 6. Deploy to S3
 
