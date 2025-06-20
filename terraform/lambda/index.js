@@ -34,11 +34,21 @@ exports.handler = async (event) => {
 
     // Extract user ID from Cognito JWT token
     let userId = null;
+    console.log("Request context:", JSON.stringify(event.requestContext, null, 2));
+    
     if (event.requestContext && event.requestContext.authorizer) {
+      console.log("Authorizer context:", JSON.stringify(event.requestContext.authorizer, null, 2));
       // Cognito puts user info in the authorizer context
       const claims = event.requestContext.authorizer.claims;
-      userId = claims.sub; // 'sub' is the unique user ID in Cognito
-      console.log("Authenticated user:", userId);
+      if (claims) {
+        userId = claims.sub; // 'sub' is the unique user ID in Cognito
+        console.log("Authenticated user:", userId);
+        console.log("User email:", claims.email);
+      } else {
+        console.log("No claims found in authorizer context");
+      }
+    } else {
+      console.log("No authorizer context found");
     }
 
     // Handle POST - Create video metadata

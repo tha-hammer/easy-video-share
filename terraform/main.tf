@@ -473,6 +473,7 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
       aws_api_gateway_integration.videos_post_integration.id,
       aws_api_gateway_integration.videos_get_integration.id,
       aws_api_gateway_integration.videos_options_integration.id,
+      aws_api_gateway_authorizer.cognito_authorizer.id,
     ]))
   }
 
@@ -564,8 +565,9 @@ resource "aws_cognito_user_pool_client" "video_app_client" {
 
 # API Gateway Cognito Authorizer
 resource "aws_api_gateway_authorizer" "cognito_authorizer" {
-  name          = "${var.project_name}-cognito-auth"
-  type          = "COGNITO_USER_POOLS"
-  rest_api_id   = aws_api_gateway_rest_api.video_api.id
-  provider_arns = [aws_cognito_user_pool.video_app_users.arn]
+  name            = "${var.project_name}-cognito-auth"
+  type            = "COGNITO_USER_POOLS"
+  rest_api_id     = aws_api_gateway_rest_api.video_api.id
+  provider_arns   = [aws_cognito_user_pool.video_app_users.arn]
+  identity_source = "method.request.header.Authorization"
 } 

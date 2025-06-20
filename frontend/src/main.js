@@ -11,6 +11,36 @@ import {
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { AWS_CONFIG, UPLOAD_CONFIG, API_CONFIG } from './config.js'
+import { authManager } from './auth.js'
+import { authUI } from './auth-ui.js'
+
+// ------------------------------------------------------------
+// 0.  Detect device / network and tailor the uploader
+// ------------------------------------------------------------
+(function adaptUploadConfig () {
+  const MB = 1024 * 1024
+
+  // crude mobile test – swap in your preferred detection
+  const isMobile =
+      /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+  // optional: finer tuning via Network-Information API
+  const netInfo = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+  const slowLink = netInfo && ['slow-2g', '2g', '3g'].includes(netInfo.effectiveType)
+
+  if (isMobile || slowLink) {
+    // mobile / slow network → smaller parts, fewer parallel sockets
+    Object.assign(UPLOAD_CONFIG, {
+      chunkSize:             8 * MB,   // 8 MB parts
+      maxConcurrentUploads:  3,
+      useTransferAcceleration: false   // TA often hurts on 4G/5G
+    })
+    console.log('[AdaptiveConfig] Mobile/slow network – using 8 MB parts, 3 parallel uploads')
+  } else {
+    // desktop / good link → keep original heavy settings
+    console.log('[AdaptiveConfig] Desktop/fast network – keeping default multipart settings')
+  }
+})()
 
 // Initialize S3 client with optional transfer acceleration
 let s3Client = new S3Client({
@@ -36,146 +66,229 @@ let currentMultipartUpload = null
 let uploadedParts = []
 let chunkProgress = new Map() // Track individual chunk progress
 let lastProgressUpdate = 0 // Throttle progress updates
+let currentUser = null
 
-// Main application HTML
-document.querySelector('#app').innerHTML = `
-  <div class="container">
-    <header class="header">
-      <h1>🎥 Easy Video Share</h1>
-      <p>Upload and share your videos easily</p>
-    </header>
-
-    <main class="main">
-      <!-- Upload Section -->
-      <section class="upload-section">
-        <h2>Upload Video</h2>
-        <form id="upload-form" class="upload-form">
-          <div class="form-group">
-            <label for="username">Username</label>
-            <input 
-              type="text" 
-              id="username" 
-              name="username" 
-              required 
-              maxlength="50" 
-              placeholder="Enter your username..."
-              pattern="[a-zA-Z0-9_-]+"
-              title="Username can only contain letters, numbers, hyphens, and underscores"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="video-title">Video Title</label>
-            <input 
-              type="text" 
-              id="video-title" 
-              name="title" 
-              required 
-              maxlength="100" 
-              placeholder="Enter video title..."
-            />
-          </div>
-          
-          <div class="form-group">
-            <label for="video-file">Select Video File</label>
-            <input 
-              type="file" 
-              id="video-file" 
-              name="videoFile" 
-              accept="video/mp4,video/mov,video/avi,video/webm" 
-              required
-            />
-            <small>Max size: 2GB. Supported formats: MP4, MOV, AVI, WebM</small>
-          </div>
-
-          <button type="submit" id="upload-btn" class="upload-btn">
-            <span id="upload-text">Upload Video</span>
-            <div id="upload-spinner" class="spinner hidden"></div>
-          </button>
-          
-          <div id="upload-progress" class="progress-container enhanced hidden">
-            <div class="progress-header">
-              <span class="progress-title">Uploading: <span id="progress-filename"></span></span>
-              <span id="progress-percentage">0%</span>
-            </div>
-            
-            <div class="progress-bar">
-              <div id="progress-fill" class="progress-fill"></div>
-            </div>
-            
-            <div class="progress-stats">
-              <span id="progress-bytes">0 MB / 0 MB</span>
-              <span id="progress-speed">0 MB/s</span>
-              <span id="progress-eta">--:--</span>
-            </div>
-            
-            <div class="progress-actions">
-              <button type="button" id="pause-btn" class="progress-btn">⏸️ Pause</button>
-              <button type="button" id="cancel-btn" class="progress-btn">❌ Cancel</button>
-            </div>
-          </div>
-        </form>
-        
-        <div id="upload-status" class="status-message"></div>
-      </section>
-
-      <!-- Video List Section -->
-      <section class="video-section">
-        <h2>Uploaded Videos</h2>
-        <div id="video-list" class="video-list">
-          <div class="loading">Loading videos...</div>
-        </div>
-      </section>
-    </main>
-
-    <!-- Video Modal -->
-    <div id="video-modal" class="modal hidden">
-      <div class="modal-content">
-        <button class="modal-close" id="modal-close">&times;</button>
-        <h3 id="modal-title">Video Title</h3>
-        <video id="modal-video" controls>
-          Your browser does not support the video tag.
-        </video>
-      </div>
-    </div>
-  </div>
-`
+// Application will be rendered dynamically based on auth state
 
 // Event Listeners
-document.addEventListener('DOMContentLoaded', () => {
-  setupEventListeners()
-  loadVideos()
+document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize authentication
+  const isAuthenticated = await authManager.initialize()
+  
+  if (isAuthenticated) {
+    // User is authenticated, show main app
+    await initializeMainApp()
+  } else {
+    // User is not authenticated, show login
+    authUI.show('login')
+  }
+
+  // Listen for auth state changes
+  authManager.subscribe(async (authState) => {
+    if (authState.isAuthenticated) {
+      currentUser = authState.user
+      await initializeMainApp()
+    } else {
+      currentUser = null
+      authUI.show('login')
+    }
+  })
 })
+
+async function initializeMainApp() {
+  // Re-render the main app HTML (in case we're coming from auth)
+  renderMainApp()
+  setupEventListeners()
+  await updateUserInfo()
+  
+  // Small delay to ensure session is fully established
+  setTimeout(() => {
+    loadVideos()
+  }, 500)
+}
+
+function renderMainApp() {
+  const appContainer = document.querySelector('#app')
+  appContainer.innerHTML = getMainAppHTML()
+}
+
+function getMainAppHTML() {
+  return `
+    <div class="container">
+      <header class="header">
+        <h1>🎥 Easy Video Share</h1>
+        <p>Upload and share your videos easily</p>
+      </header>
+
+      <main class="main">
+        <!-- User Info Section -->
+        <div id="user-info" class="user-info">
+          <div class="user-details">
+            <div class="user-email" id="user-email">user@example.com</div>
+            <div class="user-welcome">Welcome back!</div>
+          </div>
+          <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
+
+        <!-- Upload Section -->
+        <section class="upload-section">
+          <h2>Upload Video</h2>
+          <form id="upload-form" class="upload-form">
+            <div class="form-group">
+              <label for="video-title">Video Title</label>
+              <input 
+                type="text" 
+                id="video-title" 
+                name="title" 
+                required 
+                maxlength="100" 
+                placeholder="Enter video title..."
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="video-file">Select Video File</label>
+              <input 
+                type="file" 
+                id="video-file" 
+                name="videoFile" 
+                accept="video/mp4,video/mov,video/avi,video/webm" 
+                required
+              />
+              <small>Max size: 2GB. Supported formats: MP4, MOV, AVI, WebM</small>
+            </div>
+
+            <button type="submit" id="upload-btn" class="upload-btn">
+              <span id="upload-text">Upload Video</span>
+              <div id="upload-spinner" class="spinner hidden"></div>
+            </button>
+            
+            <div id="upload-progress" class="progress-container enhanced hidden">
+              <div class="progress-header">
+                <span class="progress-title">Uploading: <span id="progress-filename"></span></span>
+                <span id="progress-percentage">0%</span>
+              </div>
+              
+              <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+              </div>
+              
+              <div class="progress-stats">
+                <span id="progress-bytes">0 MB / 0 MB</span>
+                <span id="progress-speed">0 MB/s</span>
+                <span id="progress-eta">--:--</span>
+              </div>
+              
+              <div class="progress-actions">
+                <button type="button" id="pause-btn" class="progress-btn">⏸️ Pause</button>
+                <button type="button" id="cancel-btn" class="progress-btn">❌ Cancel</button>
+              </div>
+            </div>
+          </form>
+          
+          <div id="upload-status" class="status-message"></div>
+        </section>
+
+        <!-- Video List Section -->
+        <section class="video-section">
+          <h2>My Videos</h2>
+          <div id="video-list" class="video-list">
+            <div class="loading">Loading videos...</div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Video Modal -->
+      <div id="video-modal" class="modal hidden">
+        <div class="modal-content">
+          <button class="modal-close" id="modal-close">&times;</button>
+          <h3 id="modal-title">Video Title</h3>
+          <video id="modal-video" controls>
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+    </div>
+  `
+}
+
 
 function setupEventListeners() {
   // Upload form
   const uploadForm = document.getElementById('upload-form')
-  uploadForm.addEventListener('submit', handleUpload)
+  if (uploadForm) {
+    uploadForm.addEventListener('submit', handleUpload)
+  }
 
   // File input validation
   const fileInput = document.getElementById('video-file')
-  fileInput.addEventListener('change', validateFile)
+  if (fileInput) {
+    fileInput.addEventListener('change', validateFile)
+  }
 
   // Upload control buttons
   const pauseBtn = document.getElementById('pause-btn')
   const cancelBtn = document.getElementById('cancel-btn')
   
-  pauseBtn.addEventListener('click', pauseUpload)
-  cancelBtn.addEventListener('click', cancelUpload)
+  if (pauseBtn) pauseBtn.addEventListener('click', pauseUpload)
+  if (cancelBtn) cancelBtn.addEventListener('click', cancelUpload)
+
+  // Logout button
+  const logoutBtn = document.getElementById('logout-btn')
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout)
+  }
 
   // Modal controls
   const modal = document.getElementById('video-modal')
   const modalClose = document.getElementById('modal-close')
   
-  modalClose.addEventListener('click', closeModal)
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeModal()
-  })
+  if (modalClose) modalClose.addEventListener('click', closeModal)
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal()
+    })
+  }
   
   // Escape key to close modal
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal()
   })
+}
+
+async function updateUserInfo() {
+  if (currentUser) {
+    const userEmailElement = document.getElementById('user-email')
+    if (userEmailElement) {
+      try {
+        // Get user attributes to access email
+        const session = await authManager.getAccessToken()
+        if (session) {
+          // Try to get email from the JWT token claims
+          const userAttributes = await authManager.getUserAttributes()
+          const email = userAttributes?.email || currentUser.username || 'User'
+          userEmailElement.textContent = email
+        } else {
+          userEmailElement.textContent = currentUser.username || 'User'
+        }
+      } catch (error) {
+        console.error('Error getting user attributes:', error)
+        userEmailElement.textContent = currentUser.username || 'User'
+      }
+    }
+  }
+}
+
+async function handleLogout() {
+  const result = await authManager.logout()
+  if (result.success) {
+    // The auth state change will automatically show the login screen
+    console.log('Logged out successfully')
+  } else {
+    console.error('Logout failed:', result.error)
+    // Show logout anyway to prevent stuck state
+    authUI.show('login')
+  }
 }
 
 function validateFile(event) {
@@ -203,21 +316,18 @@ function validateFile(event) {
 async function handleUpload(event) {
   event.preventDefault()
   
+  if (!authManager.isUserAuthenticated()) {
+    showStatus('error', 'Please login to upload videos')
+    return
+  }
+  
   const form = event.target
   const formData = new FormData(form)
-  const username = formData.get('username').trim()
   const title = formData.get('title').trim()
   const file = formData.get('videoFile')
   
-  if (!username || !title || !file) {
+  if (!title || !file) {
     showStatus('error', 'Please fill in all fields')
-    return
-  }
-
-  // Validate username format
-  const usernamePattern = /^[a-zA-Z0-9_-]+$/
-  if (!usernamePattern.test(username)) {
-    showStatus('error', 'Username can only contain letters, numbers, hyphens, and underscores')
     return
   }
   
@@ -258,7 +368,6 @@ async function handleUpload(event) {
     // Save metadata to DynamoDB via API
     showStatus('info', 'Saving to database...')
     await saveVideoMetadataToAPI({
-      username: username,
       title: title,
       filename: fileName,
       bucketLocation: videoKey,
@@ -366,22 +475,13 @@ async function uploadWithPresignedUrl(file, key) {
 }
 
 async function uploadWithMultipart(file, key) {
-  let uploadId = null
-  
-  try {
-    // Reset progress tracking variables
-    uploadStartTime = null
-    lastProgressTime = null
-    lastProgressBytes = 0
-    uploadedParts = []
-    chunkProgress.clear()
-    
-    // Set filename in progress display
-    document.getElementById('progress-filename').textContent = file.name
-    
-    // Create multipart upload
-    const createCommand = new CreateMultipartUploadCommand({
-      Bucket: AWS_CONFIG.bucketName,
+  const { bucketName } = AWS_CONFIG
+  const { chunkSize, maxConcurrentUploads } = UPLOAD_CONFIG
+
+  // 1. Create multipart upload
+  const { UploadId: uploadId } = await s3Client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: bucketName,
       Key: key,
       ContentType: file.type,
       Metadata: {
@@ -389,99 +489,68 @@ async function uploadWithMultipart(file, key) {
         'upload-timestamp': new Date().toISOString()
       }
     })
-    
-    const createResponse = await s3Client.send(createCommand)
-    uploadId = createResponse.UploadId
-    currentMultipartUpload = { uploadId, key }
-    
-    // Calculate chunks
-    const chunkSize = UPLOAD_CONFIG.chunkSize
-    const totalChunks = Math.ceil(file.size / chunkSize)
-    
-    showStatus('info', `Uploading ${totalChunks} chunks in parallel...`)
-    
-    // Upload chunks in batches to avoid overwhelming the connection
-    const batchSize = UPLOAD_CONFIG.maxConcurrentUploads
-    let totalUploaded = 0
-    
-    for (let batchStart = 0; batchStart < totalChunks; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, totalChunks)
-      const batchPromises = []
-      
-      for (let chunkIndex = batchStart; chunkIndex < batchEnd; chunkIndex++) {
-        const start = chunkIndex * chunkSize
-        const end = Math.min(start + chunkSize, file.size)
-        const chunk = file.slice(start, end)
-        
-        batchPromises.push(uploadChunkWithProgress(chunk, key, uploadId, chunkIndex + 1, start, file.size, totalChunks))
-      }
-      
-      // Wait for this batch to complete
-      const batchResults = await Promise.all(batchPromises)
-      uploadedParts.push(...batchResults)
-      
-      // Update overall progress
-      totalUploaded += batchResults.reduce((sum, result) => sum + result.size, 0)
-      const overallProgress = Math.round((totalUploaded / file.size) * 100)
-      updateMultipartProgress(overallProgress, totalUploaded, file.size, batchEnd, totalChunks)
+  )
+
+  currentMultipartUpload = { uploadId, key }
+  uploadedParts = []
+  chunkProgress.clear()
+
+  const totalParts = Math.ceil(file.size / chunkSize)
+  const partQueue   = Array.from({ length: totalParts }, (_, i) => i + 1)
+  const inFlight    = new Set()
+
+  const startNext = async () => {
+    if (partQueue.length === 0) return
+    const partNumber = partQueue.shift()
+    inFlight.add(partNumber)
+
+    const start = (partNumber - 1) * chunkSize
+    const end   = Math.min(start + chunkSize, file.size)
+    const chunk = file.slice(start, end)
+    console.log('🚚 part', partNumber, 'started; in-flight', inFlight.size)
+
+    try {
+      const result = await uploadChunkWithProgress(
+        chunk, key, uploadId, partNumber, start, file.size, totalParts
+      )
+      uploadedParts.push(result)
+    } finally {
+      inFlight.delete(partNumber)
+      console.log('🚚 part', partNumber, 'finished; in-flight', inFlight.size)
+      // schedule another as soon as one finishes
+      if (partQueue.length) startNext()
+      // resolve when everything is done
+      if (partQueue.length === 0 && inFlight.size === 0) finishUpload()
     }
-    
-    // Sort parts by part number (required by S3)
-    uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber)
-    
-    // Complete multipart upload
-    showStatus('info', 'Finalizing upload...')
-    const completeCommand = new CompleteMultipartUploadCommand({
-      Bucket: AWS_CONFIG.bucketName,
-      Key: key,
-      UploadId: uploadId,
-      MultipartUpload: {
-        Parts: uploadedParts.map(part => ({
-          ETag: part.ETag,
-          PartNumber: part.PartNumber
-        }))
-      }
-    })
-    
-    const result = await s3Client.send(completeCommand)
-    currentMultipartUpload = null
-    return result
-    
-  } catch (error) {
-    // Check if it's a DNS/network error and we should try fallback
-    if (error.message.includes('Network error') && UPLOAD_CONFIG.useTransferAcceleration) {
-      console.warn('Transfer acceleration failed, falling back to standard endpoint...')
-      showStatus('info', 'Retrying with standard S3 endpoint...')
-      
-      // Switch to fallback client and retry
-      s3Client = s3ClientFallback
-      UPLOAD_CONFIG.useTransferAcceleration = false
-      
-      // Retry the upload with fallback client
-      try {
-        return await uploadWithMultipart(file, key)
-      } catch (retryError) {
-        error = retryError // Use the retry error if fallback also fails
-      }
-    }
-    
-    // Abort multipart upload on error
-    if (uploadId) {
-      try {
-        const abortCommand = new AbortMultipartUploadCommand({
-          Bucket: AWS_CONFIG.bucketName,
-          Key: key,
-          UploadId: uploadId
-        })
-        await s3Client.send(abortCommand)
-      } catch (abortError) {
-        console.error('Failed to abort multipart upload:', abortError)
-      }
-    }
-    
-    currentMultipartUpload = null
-    throw new Error(`Multipart upload failed: ${error.message}`)
   }
+
+  // kick-off initial window
+  Array.from({ length: Math.min(maxConcurrentUploads, partQueue.length) })
+       .forEach(startNext)
+
+  // wait here until `finishUpload` runs
+  return new Promise((resolve, reject) => {
+    const finishUpload = async () => {
+      try {
+        // Sort by part number
+        uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber)
+        const complete = await s3Client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket: bucketName,
+            Key: key,
+            UploadId: uploadId,
+            MultipartUpload: {
+              Parts: uploadedParts.map(({ PartNumber, ETag }) => ({ PartNumber, ETag }))
+            }
+          })
+        )
+        currentMultipartUpload = null
+        resolve(complete)
+      } catch (err) {
+        reject(err)
+      }
+    }
+  })
 }
 
 async function uploadChunkWithProgress(chunk, key, uploadId, partNumber, startByte, totalFileSize, totalChunks) {
@@ -597,11 +666,27 @@ async function uploadMetadata(metadata, key) {
 // API functions for DynamoDB integration
 async function saveVideoMetadataToAPI(videoData) {
   try {
+    const accessToken = await authManager.getAccessToken()
+    if (!accessToken) {
+      throw new Error('No authentication token available')
+    }
+
+    console.log('Making API call with token:', accessToken ? 'Token present' : 'No token')
+    console.log('POST Token details:', {
+      length: accessToken ? accessToken.length : 0,
+      prefix: accessToken ? accessToken.substring(0, 50) + '...' : 'None'
+    })
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    }
+    
+    console.log('POST Request headers:', headers)
+
     const response = await fetch(API_CONFIG.videosEndpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
       body: JSON.stringify(videoData)
     })
 
@@ -611,47 +696,74 @@ async function saveVideoMetadataToAPI(videoData) {
     }
 
     const result = await response.json()
-    console.log('Video metadata saved to database:', result)
-    return result
+/*     console.log('Video metadata saved to database:', result)
+ */    return result
   } catch (error) {
     console.error('Failed to save metadata to API:', error)
     throw new Error(`Failed to save to database: ${error.message}`)
   }
 }
 
-async function loadVideosFromAPI(username = null) {
+async function loadVideosFromAPI() {
   try {
-    let url = API_CONFIG.videosEndpoint
-    if (username) {
-      url += `?username=${encodeURIComponent(username)}`
+    const accessToken = await authManager.getAccessToken()
+    if (!accessToken) {
+      throw new Error('No authentication token available')
     }
 
-    const response = await fetch(url, {
+/*     console.log('Loading videos with token:', accessToken ? 'Token present' : 'No token')
+    console.log('Token details:', {
+      length: accessToken ? accessToken.length : 0,
+      prefix: accessToken ? accessToken.substring(0, 50) + '...' : 'None'
+    }) */
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    }
+    
+    //console.log('Request headers:', headers)
+
+    const response = await fetch(API_CONFIG.videosEndpoint, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      headers: headers
     })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      console.error('API Error:', response.status, errorData)
       throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
     }
 
     const result = await response.json()
+    // console.log('API Response:', result)
     return result.videos || []
   } catch (error) {
     console.error('Failed to load videos from API:', error)
-    // Fall back to S3 method if API fails
-    console.log('Falling back to S3 metadata loading...')
-    return await loadVideosFromS3()
+    // DON'T fall back to S3 - that shows all videos, not user-specific videos
+    // Instead, return empty array for authenticated users
+    throw error
   }
 }
 
-async function loadVideos(username = null) {
+async function loadVideos() {
+  const videoListElement = document.getElementById('video-list')
+  
   try {
-    // Try to load from API first
-    const apiVideos = await loadVideosFromAPI(username)
+    if (!authManager.isUserAuthenticated()) {
+      videos = []
+      displayVideoList(videos)
+      return
+    }
+
+    // Show loading state
+    if (videoListElement) {
+      videoListElement.innerHTML = '<div class="loading">Loading your videos...</div>'
+    }
+
+    // Load from authenticated API only (no S3 fallback)
+    const apiVideos = await loadVideosFromAPI()
+    // console.log('Loaded videos from API:', apiVideos.length)
     
     // Transform API response to match existing format
     videos = apiVideos.map(video => ({
@@ -661,16 +773,26 @@ async function loadVideos(username = null) {
       fileSize: video.file_size,
       contentType: video.content_type,
       videoUrl: `https://${AWS_CONFIG.bucketName}.s3.amazonaws.com/${video.bucket_location}`,
-      username: video.username
+      userEmail: video.user_email || 'Unknown'
     }))
     
     displayVideoList(videos)
     
   } catch (error) {
     console.error('Error loading videos:', error)
-    document.getElementById('video-list').innerHTML = `
-      <div class="error">Error loading videos: ${error.message}</div>
-    `
+    if (videoListElement) {
+      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        videoListElement.innerHTML = `
+          <div class="error">
+            Authentication failed. Please <a href="#" onclick="location.reload()">refresh the page</a> and try again.
+          </div>
+        `
+      } else {
+        videoListElement.innerHTML = `
+          <div class="error">Error loading videos: ${error.message}</div>
+        `
+      }
+    }
   }
 }
 
@@ -750,7 +872,7 @@ function displayVideoList(videoList) {
       <div class="video-info">
         <h3 class="video-title">${video.title}</h3>
         <div class="video-meta">
-          <span class="username">👤 ${video.username || 'Unknown'}</span>
+          <span class="user-email">👤 ${video.userEmail}</span>
           <span class="upload-date">${new Date(video.uploadDate).toLocaleDateString()}</span>
           <span class="file-size">${(video.fileSize / 1024 / 1024).toFixed(2)} MB</span>
         </div>
@@ -870,49 +992,41 @@ function updateMultipartProgress(percentage, loaded, total, completedChunks, tot
 
 function updateAggregatedProgress(totalFileSize, totalChunks) {
   const now = Date.now()
-  
-  // Initialize timing on first progress event
+  // Initialise timing on first call
   if (!uploadStartTime) {
     uploadStartTime = now
     lastProgressTime = now
     lastProgressBytes = 0
   }
-  
-  // Calculate total bytes uploaded across all active chunks
-  let totalBytesUploaded = 0
+
+  // Bytes from parts that have already completed
+  const completedBytes = uploadedParts.reduce((sum, p) => sum + (p.size || 0), 0)
+
+  // Bytes from parts that are still in-flight (chunkProgress)
+  let activeBytes = 0
   let activeChunks = 0
-  let completedChunks = 0
-  
-  for (const [chunkNum, progress] of chunkProgress.entries()) {
-    totalBytesUploaded += progress.loaded
+  for (const progress of chunkProgress.values()) {
+    activeBytes += progress.loaded
     activeChunks++
-    
-    if (progress.loaded === progress.total) {
-      completedChunks++
-    }
   }
-  
-  // Calculate overall progress percentage
+
+  const totalBytesUploaded = completedBytes + activeBytes
   const overallProgress = Math.round((totalBytesUploaded / totalFileSize) * 100)
-  
-  // Update progress bar and percentage
+
+  // UI updates
   document.getElementById('progress-fill').style.width = `${overallProgress}%`
-  document.getElementById('progress-percentage').textContent = `${overallProgress}% (${activeChunks} active chunks)`
-  
-  // Update bytes transferred
+  document.getElementById('progress-percentage').textContent = `${overallProgress}% (${activeChunks} active)`
+
   const loadedMB = (totalBytesUploaded / 1024 / 1024).toFixed(1)
   const totalMB = (totalFileSize / 1024 / 1024).toFixed(1)
   document.getElementById('progress-bytes').textContent = `${loadedMB} MB / ${totalMB} MB`
-  
-  // Calculate and display upload speed
-  const totalTime = (now - uploadStartTime) / 1000 // total seconds since start
+
+  const totalTime = (now - uploadStartTime) / 1000
   if (totalTime > 0) {
     const averageSpeedBytesPerSecond = totalBytesUploaded / totalTime
     const speedMBPerSecond = (averageSpeedBytesPerSecond / 1024 / 1024).toFixed(1)
-    
     document.getElementById('progress-speed').textContent = `${speedMBPerSecond} MB/s`
-    
-    // Calculate ETA based on average speed
+
     if (averageSpeedBytesPerSecond > 0) {
       const remainingBytes = totalFileSize - totalBytesUploaded
       const etaSeconds = Math.round(remainingBytes / averageSpeedBytesPerSecond)
@@ -1026,7 +1140,7 @@ window.debugS3 = async function() {
     })
     
     const response = await s3Client.send(listCommand)
-    console.log('S3 Contents:', response.Contents)
+    // console.log('S3 Contents:', response.Contents)
     
     // Check each metadata file
     for (const object of response.Contents || []) {
@@ -1034,7 +1148,7 @@ window.debugS3 = async function() {
         const url = `https://${AWS_CONFIG.bucketName}.s3.amazonaws.com/${object.Key}`
         const fileResponse = await fetch(url)
         const text = await fileResponse.text()
-        console.log(`File: ${object.Key}, Size: ${object.Size}, Content preview:`, text.substring(0, 100))
+        // console.log(`File: ${object.Key}, Size: ${object.Size}, Content preview:`, text.substring(0, 100))
       }
     }
   } catch (error) {
@@ -1045,7 +1159,7 @@ window.debugS3 = async function() {
 // Function to clean up corrupted metadata files
 window.cleanupCorruptedFiles = async function() {
   try {
-    console.log('Scanning for corrupted metadata files...')
+   // console.log('Scanning for corrupted metadata files...')
     
     const listCommand = new ListObjectsV2Command({
       Bucket: AWS_CONFIG.bucketName,
