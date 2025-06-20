@@ -11,6 +11,13 @@ export const AWS_CONFIG = {
   }
 }
 
+// Cognito Configuration
+export const COGNITO_CONFIG = {
+  region: import.meta.env.VITE_COGNITO_REGION || 'us-east-1',
+  userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID || 'your-user-pool-id',
+  userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID || 'your-client-id'
+}
+
 // API Configuration
 export const API_CONFIG = {
   baseUrl: import.meta.env.VITE_API_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev',
@@ -25,7 +32,9 @@ export const UPLOAD_CONFIG = {
   
   // Multipart upload settings optimized for high bandwidth
   multipartThreshold: 200 * 1024 * 1024, // Use multipart for files > 200MB (higher threshold)
+  // Disable multipart uploads by making the threshold effectively unreachable
+  // multipartThreshold: Number.MAX_SAFE_INTEGER, // Multipart upload disabled
   chunkSize: 50 * 1024 * 1024, // 50MB chunks (much larger for better throughput)
   maxConcurrentUploads: 6, // More parallel uploads for high bandwidth
-  useTransferAcceleration: false // Disabled due to DNS resolution issues
+  useTransferAcceleration: true // Disabled due to DNS resolution issues
 } 
