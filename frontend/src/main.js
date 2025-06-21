@@ -1,4 +1,5 @@
 import './style.css'
+import { Modal } from 'bootstrap'
 import { 
   S3Client, 
   ListObjectsV2Command, 
@@ -130,13 +131,20 @@ function renderMainApp() {
 
 function getMainAppHTML() {
   return `
-    <div class="container">
-      <header class="header">
-        <h1>🎥 Easy Video Share</h1>
+    <!-- Header -->
+    <header class="header">
+      <div class="container">
+        <h1>
+          <i class="bi bi-camera-video text-primary me-2"></i>
+          Easy Video Share
+        </h1>
         <p>Upload and share your videos easily</p>
-      </header>
+      </div>
+    </header>
 
-      <main class="main">
+    <!-- Main Content -->
+    <main class="main">
+      <div class="container">
         <!-- User Info Section -->
         <div id="user-info" class="user-info">
           <div class="user-details">
@@ -144,91 +152,161 @@ function getMainAppHTML() {
             <div class="user-welcome">Welcome back!</div>
           </div>
           <div class="user-actions">
-            <button id="admin-btn" class="admin-btn" style="display: none;">🔧 Admin</button>
-            <button id="logout-btn" class="logout-btn">Logout</button>
+            <button id="admin-btn" class="btn btn-sm btn-info d-none">
+              <i class="bi bi-gear me-1"></i>Admin
+            </button>
+            <button id="logout-btn" class="btn btn-sm btn-danger">
+              <i class="bi bi-box-arrow-right me-1"></i>Logout
+            </button>
           </div>
         </div>
 
-        <!-- Upload Section -->
-        <section class="upload-section">
-          <h2>Upload Video</h2>
-          <form id="upload-form" class="upload-form">
-            <div class="form-group">
-              <label for="video-title">Video Title</label>
-              <input 
-                type="text" 
-                id="video-title" 
-                name="title" 
-                required 
-                maxlength="100" 
-                placeholder="Enter video title..."
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="video-file">Select Video File</label>
-              <input 
-                type="file" 
-                id="video-file" 
-                name="videoFile" 
-                accept="video/mp4,video/mov,video/avi,video/webm" 
-                required
-              />
-              <small>Max size: 2GB. Supported formats: MP4, MOV, AVI, WebM</small>
-            </div>
+        <div class="row g-4">
+          <!-- Upload Section -->
+          <div class="col-12 col-xl-6">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title mb-0">
+                  <i class="bi bi-cloud-upload me-2"></i>Upload Video
+                </h3>
+              </div>
+              <div class="card-body">
+                <form id="upload-form" class="upload-form">
+                  <div class="mb-4">
+                    <label for="video-title" class="form-label required">
+                      <i class="bi bi-pencil me-1"></i>Video Title
+                    </label>
+                    <input 
+                      type="text" 
+                      id="video-title" 
+                      name="title" 
+                      class="form-control"
+                      required 
+                      maxlength="100" 
+                      placeholder="Enter a descriptive title for your video..."
+                    />
+                  </div>
+                  
+                  <div class="mb-4">
+                    <label for="video-file" class="form-label required">
+                      <i class="bi bi-file-earmark-play me-1"></i>Select Video File
+                    </label>
+                    <input 
+                      type="file" 
+                      id="video-file" 
+                      name="videoFile" 
+                      class="form-control"
+                      accept="video/mp4,video/mov,video/avi,video/webm" 
+                      required
+                    />
+                    <div class="form-text">
+                      <i class="bi bi-info-circle me-1"></i>
+                      Max size: 2GB. Supported formats: MP4, MOV, AVI, WebM
+                    </div>
+                  </div>
 
-            <button type="submit" id="upload-btn" class="upload-btn">
-              <span id="upload-text">Upload Video</span>
-              <div id="upload-spinner" class="spinner hidden"></div>
-            </button>
-            
-            <div id="upload-progress" class="progress-container enhanced hidden">
-              <div class="progress-header">
-                <span class="progress-title">Uploading: <span id="progress-filename"></span></span>
-                <span id="progress-percentage">0%</span>
-              </div>
-              
-              <div class="progress-bar">
-                <div id="progress-fill" class="progress-fill"></div>
-              </div>
-              
-              <div class="progress-stats">
-                <span id="progress-bytes">0 MB / 0 MB</span>
-                <span id="progress-speed">0 MB/s</span>
-                <span id="progress-eta">--:--</span>
-              </div>
-              
-              <div class="progress-actions">
-                <button type="button" id="pause-btn" class="progress-btn">⏸️ Pause</button>
-                <button type="button" id="cancel-btn" class="progress-btn">❌ Cancel</button>
+                  <button type="submit" id="upload-btn" class="btn btn-primary w-100">
+                    <span id="upload-text">
+                      <i class="bi bi-upload me-2"></i>Upload Video
+                    </span>
+                    <div id="upload-spinner" class="spinner-border spinner-border-sm me-2 d-none"></div>
+                  </button>
+                  
+                  <!-- Progress Section -->
+                  <div id="upload-progress" class="progress-container mt-4 d-none">
+                    <div class="progress-header">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="progress-title fw-bold">
+                          <i class="bi bi-upload me-1"></i>
+                          Uploading: <span id="progress-filename" class="text-primary"></span>
+                        </span>
+                        <span id="progress-percentage" class="badge bg-primary">0%</span>
+                      </div>
+                    </div>
+                    
+                    <div class="progress mb-3" style="height: 8px;">
+                      <div id="progress-fill" class="progress-bar progress-bar-striped progress-bar-animated" 
+                           role="progressbar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div class="progress-stats">
+                      <div class="row text-center">
+                        <div class="col-4">
+                          <small class="text-muted d-block">Data Transferred</small>
+                          <span id="progress-bytes" class="fw-bold">0 MB / 0 MB</span>
+                        </div>
+                        <div class="col-4">
+                          <small class="text-muted d-block">Speed</small>
+                          <span id="progress-speed" class="fw-bold">0 MB/s</span>
+                        </div>
+                        <div class="col-4">
+                          <small class="text-muted d-block">Time Remaining</small>
+                          <span id="progress-eta" class="fw-bold">--:--</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="progress-actions mt-3">
+                      <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" id="pause-btn" class="btn btn-sm btn-warning">
+                          <i class="bi bi-pause me-1"></i>Pause
+                        </button>
+                        <button type="button" id="cancel-btn" class="btn btn-sm btn-danger">
+                          <i class="bi bi-x-circle me-1"></i>Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+                
+                <div id="upload-status" class="mt-3"></div>
               </div>
             </div>
-          </form>
-          
-          <div id="upload-status" class="status-message"></div>
-        </section>
-
-        <!-- Video List Section -->
-        <section class="video-section">
-          <h2>My Videos</h2>
-          <div id="video-list" class="video-list">
-            <div class="loading">Loading videos...</div>
           </div>
-        </section>
-      </main>
 
-              <!-- Video Modal -->
-        <div id="video-modal" class="modal hidden">
-          <div class="modal-content">
-            <button class="modal-close" id="modal-close">&times;</button>
-            <h3 id="modal-title">Video Title</h3>
+          <!-- Video List Section -->
+          <div class="col-12 col-xl-6">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title mb-0">
+                  <i class="bi bi-collection-play me-2"></i>My Videos
+                </h3>
+              </div>
+              <div class="card-body">
+                <div id="video-list" class="video-list">
+                  <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading your videos...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Video Modal -->
+    <div class="modal fade" id="video-modal" tabindex="-1" aria-labelledby="video-modal-title" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modal-title">
+              <i class="bi bi-play-circle me-2"></i>Video Player
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0">
             <div class="modal-video-container">
-              <video id="modal-video" controls preload="metadata">
+              <video id="modal-video" class="w-100" controls preload="metadata">
                 Your browser does not support the video tag.
               </video>
             </div>
           </div>
         </div>
+      </div>
     </div>
   `
 }
@@ -268,21 +346,19 @@ function setupEventListeners() {
     })
   }
 
-  // Modal controls
+  // Modal controls - Bootstrap handles most of this automatically
   const modal = document.getElementById('video-modal')
-  const modalClose = document.getElementById('modal-close')
   
-  if (modalClose) modalClose.addEventListener('click', closeModal)
+  // Clean up video when modal is hidden
   if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal()
+    modal.addEventListener('hidden.bs.modal', function () {
+      const modalVideo = document.getElementById('modal-video')
+      if (modalVideo) {
+        modalVideo.pause()
+        modalVideo.src = ''
+      }
     })
   }
-  
-  // Escape key to close modal
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal()
-  })
 }
 
 async function updateUserInfo() {
@@ -312,8 +388,10 @@ async function updateUserInfo() {
     const adminBtn = document.getElementById('admin-btn')
     if (adminBtn) {
       if (authManager.isAdmin) {
+        adminBtn.classList.remove('d-none')
         adminBtn.style.display = 'inline-block'
       } else {
+        adminBtn.classList.add('d-none')
         adminBtn.style.display = 'none'
       }
     }
@@ -937,10 +1015,13 @@ function openVideoModal(videoUrl, title) {
   
   modalTitle.textContent = title
   modalVideo.src = videoUrl
-  modal.classList.remove('hidden')
   
-  // Auto-focus on video for keyboard controls
-  modalVideo.focus()
+  // Use Bootstrap 5 Modal API
+  const bootstrapModal = new Modal(modal)
+  bootstrapModal.show()
+  
+  // Auto-focus on video for keyboard controls after modal is shown
+  setTimeout(() => modalVideo.focus(), 300)
 }
 
 function closeModal() {
@@ -949,7 +1030,12 @@ function closeModal() {
   
   modalVideo.pause()
   modalVideo.src = ''
-  modal.classList.add('hidden')
+  
+  // Use Bootstrap 5 Modal API
+  const bootstrapModal = Modal.getInstance(modal)
+  if (bootstrapModal) {
+    bootstrapModal.hide()
+  }
 }
 
 // Make modal functions globally available for admin module
