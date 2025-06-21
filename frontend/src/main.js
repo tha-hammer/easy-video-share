@@ -96,6 +96,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   })
 })
 
+// Helper function to update currentUser from authManager
+async function updateCurrentUserFromAuth() {
+  try {
+    const authUser = authManager.getCurrentUser();
+    currentUser = authUser;
+    console.log('Updated currentUser from authManager:', currentUser);
+  } catch (error) {
+    console.error('Error updating currentUser from authManager:', error);
+  }
+}
+
 async function initializeMainApp() {
   // Re-render the main app HTML (in case we're coming from auth)
   renderMainApp()
@@ -108,8 +119,9 @@ async function initializeMainApp() {
   }, 500)
 }
 
-// Make this function globally available for admin module
+// Make functions globally available for admin module
 window.initializeMainApp = initializeMainApp;
+window.updateCurrentUserFromAuth = updateCurrentUserFromAuth;
 
 function renderMainApp() {
   const appContainer = document.querySelector('#app')
@@ -272,7 +284,9 @@ function setupEventListeners() {
 }
 
 async function updateUserInfo() {
-  if (currentUser) {
+  // Always get fresh user info from authManager
+  const authUser = authManager.getCurrentUser();
+  if (authUser && authManager.isUserAuthenticated()) {
     const userEmailElement = document.getElementById('user-email')
     if (userEmailElement) {
       try {
@@ -281,14 +295,14 @@ async function updateUserInfo() {
         if (session) {
           // Try to get email from the JWT token claims
           const userAttributes = await authManager.getUserAttributes()
-          const email = userAttributes?.email || currentUser.username || 'User'
+          const email = userAttributes?.email || authUser.username || 'User'
           userEmailElement.textContent = email
         } else {
-          userEmailElement.textContent = currentUser.username || 'User'
+          userEmailElement.textContent = authUser.username || 'User'
         }
       } catch (error) {
         console.error('Error getting user attributes:', error)
-        userEmailElement.textContent = currentUser.username || 'User'
+        userEmailElement.textContent = authUser.username || 'User'
       }
     }
 

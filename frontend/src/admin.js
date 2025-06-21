@@ -498,11 +498,23 @@ class AdminUI {
   }
 
   // Back to main app
-  backToMainApp() {
-    // Re-initialize main app
-    if (typeof initializeMainApp === 'function') {
-      initializeMainApp();
-    } else {
+  async backToMainApp() {
+    try {
+      // Re-initialize main app
+      if (typeof window.initializeMainApp === 'function') {
+        await window.initializeMainApp();
+        
+        // Ensure user state is properly restored
+        // Force update of currentUser variable in main.js
+        if (typeof window.updateCurrentUserFromAuth === 'function') {
+          await window.updateCurrentUserFromAuth();
+        }
+      } else {
+        // Fallback - reload page
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error returning to main app:', error);
       // Fallback - reload page
       window.location.reload();
     }
