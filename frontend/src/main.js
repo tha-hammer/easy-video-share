@@ -13,6 +13,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { AWS_CONFIG, UPLOAD_CONFIG, API_CONFIG } from './config.js'
 import { authManager } from './auth.js'
 import { authUI } from './auth-ui.js'
+import { adminUI } from './admin.js'
 
 // ------------------------------------------------------------
 // 0.  Detect device / network and tailor the uploader
@@ -107,6 +108,9 @@ async function initializeMainApp() {
   }, 500)
 }
 
+// Make this function globally available for admin module
+window.initializeMainApp = initializeMainApp;
+
 function renderMainApp() {
   const appContainer = document.querySelector('#app')
   appContainer.innerHTML = getMainAppHTML()
@@ -127,7 +131,10 @@ function getMainAppHTML() {
             <div class="user-email" id="user-email">user@example.com</div>
             <div class="user-welcome">Welcome back!</div>
           </div>
-          <button id="logout-btn" class="logout-btn">Logout</button>
+          <div class="user-actions">
+            <button id="admin-btn" class="admin-btn" style="display: none;">🔧 Admin</button>
+            <button id="logout-btn" class="logout-btn">Logout</button>
+          </div>
         </div>
 
         <!-- Upload Section -->
@@ -239,6 +246,14 @@ function setupEventListeners() {
     logoutBtn.addEventListener('click', handleLogout)
   }
 
+  // Admin button
+  const adminBtn = document.getElementById('admin-btn')
+  if (adminBtn) {
+    adminBtn.addEventListener('click', () => {
+      adminUI.show()
+    })
+  }
+
   // Modal controls
   const modal = document.getElementById('video-modal')
   const modalClose = document.getElementById('modal-close')
@@ -274,6 +289,16 @@ async function updateUserInfo() {
       } catch (error) {
         console.error('Error getting user attributes:', error)
         userEmailElement.textContent = currentUser.username || 'User'
+      }
+    }
+
+    // Show/hide admin button based on user's admin status
+    const adminBtn = document.getElementById('admin-btn')
+    if (adminBtn) {
+      if (authManager.isAdmin) {
+        adminBtn.style.display = 'inline-block'
+      } else {
+        adminBtn.style.display = 'none'
       }
     }
   }
@@ -910,6 +935,10 @@ function closeModal() {
   modalVideo.src = ''
   modal.classList.add('hidden')
 }
+
+// Make modal functions globally available for admin module
+window.openVideoModal = openVideoModal;
+window.closeModal = closeModal;
 
 function updateProgress(percentage, loaded, total) {
   const now = Date.now()

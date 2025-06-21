@@ -275,6 +275,28 @@ resource "aws_iam_role_policy" "lambda_policy" {
           aws_dynamodb_table.video_metadata.arn,
           "${aws_dynamodb_table.video_metadata.arn}/index/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminDeleteUser",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminEnableUser",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminRemoveUserFromGroup",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:ListUsersInGroup"
+        ]
+        Resource = aws_cognito_user_pool.video_app_users.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:DeleteObject"
+        ]
+        Resource = "${aws_s3_bucket.video_bucket.arn}/*"
       }
     ]
   })
@@ -304,11 +326,43 @@ resource "aws_lambda_function" "video_metadata_api" {
   }
 }
 
+# Lambda function for admin operations
+resource "aws_lambda_function" "admin_api" {
+  filename         = "admin_lambda_function.zip"
+  function_name    = "${var.project_name}-admin-api"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "admin.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+
+  source_code_hash = data.archive_file.admin_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
+      COGNITO_USER_POOL_ID = aws_cognito_user_pool.video_app_users.id
+      CORS_ORIGIN    = "*"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
 # Create Lambda deployment package
 data "archive_file" "lambda_zip" {
   type        = "zip"
   output_path = "lambda_function.zip"
   source_dir  = "${path.module}/lambda"
+}
+
+# Create Admin Lambda deployment package
+data "archive_file" "admin_lambda_zip" {
+  type        = "zip"
+  output_path = "admin_lambda_function.zip"
+  source_dir  = "${path.module}/admin-lambda"
 }
 
 # API Gateway REST API
@@ -330,6 +384,40 @@ resource "aws_api_gateway_rest_api" "video_api" {
 resource "aws_api_gateway_resource" "videos_resource" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
   parent_id   = aws_api_gateway_rest_api.video_api.root_resource_id
+  path_part   = "videos"
+}
+
+# API Gateway resource for admin
+resource "aws_api_gateway_resource" "admin_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_rest_api.video_api.root_resource_id
+  path_part   = "admin"
+}
+
+# API Gateway resource for admin/users
+resource "aws_api_gateway_resource" "admin_users_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.admin_resource.id
+  path_part   = "users"
+}
+
+# API Gateway resource for admin/videos
+resource "aws_api_gateway_resource" "admin_videos_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.admin_resource.id
+  path_part   = "videos"
+}
+
+# API Gateway resource for admin/users/{userId}/videos
+resource "aws_api_gateway_resource" "admin_user_videos_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.admin_users_resource.id
+  path_part   = "{userId}"
+}
+
+resource "aws_api_gateway_resource" "admin_user_videos_sub_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.admin_user_videos_resource.id
   path_part   = "videos"
 }
 
@@ -386,6 +474,81 @@ resource "aws_api_gateway_integration" "videos_options_integration" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
   resource_id = aws_api_gateway_resource.videos_resource.id
   http_method = aws_api_gateway_method.videos_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+# Admin API Gateway Integrations
+resource "aws_api_gateway_integration" "admin_users_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_users_resource.id
+  http_method = aws_api_gateway_method.admin_users_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.admin_api.invoke_arn
+}
+
+resource "aws_api_gateway_integration" "admin_videos_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_videos_resource.id
+  http_method = aws_api_gateway_method.admin_videos_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.admin_api.invoke_arn
+}
+
+resource "aws_api_gateway_integration" "admin_videos_delete_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_videos_resource.id
+  http_method = aws_api_gateway_method.admin_videos_delete.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.admin_api.invoke_arn
+}
+
+resource "aws_api_gateway_integration" "admin_user_videos_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_user_videos_sub_resource.id
+  http_method = aws_api_gateway_method.admin_user_videos_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.admin_api.invoke_arn
+}
+
+# Admin CORS integrations
+resource "aws_api_gateway_integration" "admin_users_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_users_resource.id
+  http_method = aws_api_gateway_method.admin_users_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_integration" "admin_videos_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_videos_resource.id
+  http_method = aws_api_gateway_method.admin_videos_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_integration" "admin_user_videos_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_user_videos_sub_resource.id
+  http_method = aws_api_gateway_method.admin_user_videos_options.http_method
 
   type = "MOCK"
   request_templates = {
@@ -454,12 +617,28 @@ resource "aws_lambda_permission" "api_gateway_lambda" {
   source_arn    = "${aws_api_gateway_rest_api.video_api.execution_arn}/*/*"
 }
 
+# Lambda permission for Admin API Gateway
+resource "aws_lambda_permission" "admin_api_gateway_lambda" {
+  statement_id  = "AllowExecutionFromAPIGatewayAdmin"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.admin_api.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.video_api.execution_arn}/*/*"
+}
+
 # API Gateway deployment
 resource "aws_api_gateway_deployment" "video_api_deployment" {
   depends_on = [
     aws_api_gateway_integration.videos_post_integration,
     aws_api_gateway_integration.videos_get_integration,
     aws_api_gateway_integration.videos_options_integration,
+    aws_api_gateway_integration.admin_users_get_integration,
+    aws_api_gateway_integration.admin_videos_get_integration,
+    aws_api_gateway_integration.admin_videos_delete_integration,
+    aws_api_gateway_integration.admin_user_videos_get_integration,
+    aws_api_gateway_integration.admin_users_options_integration,
+    aws_api_gateway_integration.admin_videos_options_integration,
+    aws_api_gateway_integration.admin_user_videos_options_integration,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -474,6 +653,20 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
       aws_api_gateway_integration.videos_get_integration.id,
       aws_api_gateway_integration.videos_options_integration.id,
       aws_api_gateway_authorizer.cognito_authorizer.id,
+      # Admin resources
+      aws_api_gateway_resource.admin_resource.id,
+      aws_api_gateway_resource.admin_users_resource.id,
+      aws_api_gateway_resource.admin_videos_resource.id,
+      aws_api_gateway_resource.admin_user_videos_resource.id,
+      aws_api_gateway_resource.admin_user_videos_sub_resource.id,
+      aws_api_gateway_method.admin_users_get.id,
+      aws_api_gateway_method.admin_videos_get.id,
+      aws_api_gateway_method.admin_videos_delete.id,
+      aws_api_gateway_method.admin_user_videos_get.id,
+      aws_api_gateway_integration.admin_users_get_integration.id,
+      aws_api_gateway_integration.admin_videos_get_integration.id,
+      aws_api_gateway_integration.admin_videos_delete_integration.id,
+      aws_api_gateway_integration.admin_user_videos_get_integration.id,
     ]))
   }
 
@@ -533,6 +726,22 @@ resource "aws_cognito_user_pool" "video_app_users" {
   }
 }
 
+# Cognito User Pool Group for Admins
+resource "aws_cognito_user_pool_group" "admin_group" {
+  name         = "admin"
+  user_pool_id = aws_cognito_user_pool.video_app_users.id
+  description  = "Administrator group with full access to all users and videos"
+  precedence   = 1
+}
+
+# Cognito User Pool Group for Regular Users
+resource "aws_cognito_user_pool_group" "user_group" {
+  name         = "user"
+  user_pool_id = aws_cognito_user_pool.video_app_users.id
+  description  = "Regular user group with access to own videos only"
+  precedence   = 2
+}
+
 # Cognito User Pool Client for frontend application
 resource "aws_cognito_user_pool_client" "video_app_client" {
   name         = "${var.project_name}-client"
@@ -570,4 +779,63 @@ resource "aws_api_gateway_authorizer" "cognito_authorizer" {
   rest_api_id     = aws_api_gateway_rest_api.video_api.id
   provider_arns   = [aws_cognito_user_pool.video_app_users.arn]
   identity_source = "method.request.header.Authorization"
+}
+
+# Admin API Gateway Methods
+# GET /admin/users - List all users
+resource "aws_api_gateway_method" "admin_users_get" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_users_resource.id
+  http_method   = "GET"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+# GET /admin/videos - List all videos
+resource "aws_api_gateway_method" "admin_videos_get" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_videos_resource.id
+  http_method   = "GET"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+# DELETE /admin/videos - Delete video (in request body)
+resource "aws_api_gateway_method" "admin_videos_delete" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_videos_resource.id
+  http_method   = "DELETE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+# GET /admin/users/{userId}/videos - Get videos for specific user
+resource "aws_api_gateway_method" "admin_user_videos_get" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_user_videos_sub_resource.id
+  http_method   = "GET"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+# OPTIONS methods for CORS
+resource "aws_api_gateway_method" "admin_users_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_users_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_method" "admin_videos_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_videos_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_method" "admin_user_videos_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.admin_user_videos_sub_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
 } 

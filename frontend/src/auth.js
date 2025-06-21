@@ -20,6 +20,8 @@ class AuthManager {
     this.currentUser = null;
     this.isAuthenticated = false;
     this.accessToken = null;
+    this.idToken = null;
+    this.isAdmin = false;
     this.listeners = [];
   }
 
@@ -36,8 +38,48 @@ class AuthManager {
     this.listeners.forEach(callback => callback({
       isAuthenticated: this.isAuthenticated,
       user: this.currentUser,
-      token: this.accessToken
+      token: this.accessToken,
+      idToken: this.idToken,
+      isAdmin: this.isAdmin
     }));
+  }
+
+  // Check if user is in admin group
+  async checkAdminStatus() {
+    try {
+      if (!this.idToken) {
+        return false;
+      }
+
+      // Decode JWT token to check groups
+      const tokenPayload = this.parseJwt(this.idToken);
+      const groups = tokenPayload['cognito:groups'] || [];
+      
+      this.isAdmin = groups.includes('admin');
+      console.log('Admin status:', this.isAdmin, 'Groups:', groups);
+      
+      return this.isAdmin;
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      this.isAdmin = false;
+      return false;
+    }
+  }
+
+  // Helper function to decode JWT token
+  parseJwt(token) {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Error parsing JWT token:', error);
+      return {};
+    }
   }
 
   // Initialize auth state on page load
@@ -49,14 +91,19 @@ class AuthManager {
       this.currentUser = user;
       this.isAuthenticated = true;
       
-      // Store access token (for reference) but use ID token for API calls
+      // Store both access token and ID token
       this.accessToken = session.tokens?.accessToken?.toString();
+      this.idToken = session.tokens?.idToken?.toString();
+      
+      // Check admin status
+      await this.checkAdminStatus();
       
       console.log('User authenticated:', user.username);
       console.log('Tokens available:', {
         hasIdToken: !!session.tokens?.idToken,
         hasAccessToken: !!session.tokens?.accessToken
       });
+      console.log('Is Admin:', this.isAdmin);
       
       this.notify();
       return true;
@@ -65,6 +112,8 @@ class AuthManager {
       this.currentUser = null;
       this.isAuthenticated = false;
       this.accessToken = null;
+      this.idToken = null;
+      this.isAdmin = false;
       this.notify();
       return false;
     }
@@ -182,12 +231,17 @@ class AuthManager {
       this.currentUser = user;
       this.isAuthenticated = true;
       this.accessToken = session.tokens?.accessToken?.toString();
+      this.idToken = session.tokens?.idToken?.toString();
+
+      // Check admin status
+      await this.checkAdminStatus();
 
       console.log('Login successful:', user.username);
       console.log('Tokens available after login:', {
         hasIdToken: !!session.tokens?.idToken,
         hasAccessToken: !!session.tokens?.accessToken
       });
+      console.log('Is Admin:', this.isAdmin);
       
       this.notify();
 
@@ -210,12 +264,14 @@ class AuthManager {
     try {
       await signOut();
       
-      this.currentUser = null;
-      this.isAuthenticated = false;
-      this.accessToken = null;
-
-      console.log('Logout successful');
-      this.notify();
+          this.currentUser = null;
+    this.isAuthenticated = false;
+    this.accessToken = null;
+    this.idToken = null;
+    this.isAdmin = false;
+    
+    console.log('Logout successful');
+    this.notify();
 
       return {
         success: true,
