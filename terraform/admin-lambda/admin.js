@@ -27,19 +27,20 @@ const createResponse = (statusCode, body) => ({
 });
 
 // Check if user is admin
-const isAdmin = async (userId) => {
+const isAdmin = async (username, userId = null) => {
   try {
     const command = new AdminListGroupsForUserCommand({
       UserPoolId: userPoolId,
-      Username: userId
+      Username: username // Use the actual username, not the sub UUID
     });
     
     const result = await cognitoClient.send(command);
     const groups = result.Groups || [];
     
+    console.log(`Admin check for user ${username}:`, groups.map(g => g.GroupName));
     return groups.some(group => group.GroupName === 'admin');
   } catch (error) {
-    console.error('Error checking admin status:', error);
+    console.error('Error checking admin status for user:', username, error);
     return false;
   }
 };
@@ -56,27 +57,29 @@ exports.handler = async (event) => {
       return createResponse(200, { message: "CORS preflight" });
     }
 
-    // Extract user ID from Cognito JWT token
+    // Extract user info from Cognito JWT token
     let userId = null;
     let userEmail = null;
+    let username = null;
     
     if (event.requestContext && event.requestContext.authorizer) {
       const claims = event.requestContext.authorizer.claims;
       if (claims) {
         userId = claims.sub;
         userEmail = claims.email;
-        console.log("Authenticated user:", userId, userEmail);
+        username = claims['cognito:username']; // This is the actual username used in Cognito
+        console.log("Authenticated user:", { userId, userEmail, username });
       }
     }
 
-    if (!userId) {
+    if (!userId || !username) {
       return createResponse(401, {
         error: "Authentication required"
       });
     }
 
-    // Check if user is admin
-    const adminStatus = await isAdmin(userId);
+    // Check if user is admin using the username (not userId)
+    const adminStatus = await isAdmin(username, userId);
     if (!adminStatus) {
       return createResponse(403, {
         error: "Admin access required"
@@ -134,9 +137,11 @@ async function handleListUsers() {
     const transformedUsers = users.map(user => {
       const email = user.Attributes?.find(attr => attr.Name === 'email')?.Value;
       const name = user.Attributes?.find(attr => attr.Name === 'name')?.Value;
+      const sub = user.Attributes?.find(attr => attr.Name === 'sub')?.Value;
       
       return {
-        userId: user.Username,
+        userId: sub || user.Username, // Use sub (UUID) for video queries, fallback to Username
+        username: user.Username, // Keep the original username for reference
         email: email,
         name: name,
         status: user.UserStatus,

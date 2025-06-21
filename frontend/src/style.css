@@ -834,6 +834,16 @@ body {
   font-weight: 600;
 }
 
+.view-title-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.view-title-section h2 {
+  margin: 0;
+}
+
 .view-stats {
   background: rgba(255, 255, 255, 0.1);
   padding: 0.5rem 1rem;
@@ -872,7 +882,7 @@ body {
   font-size: 1.1rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: white;
+  color: rgb(8, 40, 70);
 }
 
 .user-details, .video-details {

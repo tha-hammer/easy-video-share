@@ -208,8 +208,10 @@ class AdminUI {
 
           <div id="user-videos-view" class="admin-view">
             <div class="view-header">
-              <h2>User Videos</h2>
-              <button id="back-to-users" class="back-btn">← Back to Users</button>
+              <div class="view-title-section">
+                <h2 id="user-videos-title">User Videos</h2>
+                <button id="back-to-users" class="back-btn">← Back to Users</button>
+              </div>
               <div class="view-stats">
                 <span id="user-videos-count">0 videos</span>
               </div>
@@ -221,6 +223,17 @@ class AdminUI {
         </main>
 
         <div id="admin-status" class="admin-status"></div>
+
+        <!-- Video Modal (shared with main app) -->
+        <div id="video-modal" class="modal hidden">
+          <div class="modal-content">
+            <button class="modal-close" id="modal-close">&times;</button>
+            <h3 id="modal-title">Video Title</h3>
+            <video id="modal-video" controls>
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -250,6 +263,24 @@ class AdminUI {
     document.getElementById('admin-logout').addEventListener('click', () => {
       authManager.logout();
     });
+
+    // Modal controls (reuse from main app)
+    const modal = document.getElementById('video-modal');
+    const modalClose = document.getElementById('modal-close');
+    
+    if (modalClose) modalClose.addEventListener('click', () => {
+      if (typeof window.closeModal === 'function') {
+        window.closeModal();
+      }
+    });
+    
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal && typeof window.closeModal === 'function') {
+          window.closeModal();
+        }
+      });
+    }
   }
 
   // Switch between views
@@ -363,7 +394,7 @@ class AdminUI {
   async viewUserVideos(userId, userEmail) {
     try {
       this.switchView('user-videos');
-      document.querySelector('#user-videos-view .view-header h2').textContent = `Videos by ${userEmail}`;
+      document.getElementById('user-videos-title').textContent = `Videos by ${userEmail}`;
       
       const videos = await this.adminManager.fetchUserVideos(userId);
       this.renderUserVideos(videos);
@@ -407,17 +438,34 @@ class AdminUI {
   }
 
   // Play video (reuse existing modal functionality)
-  playVideo(videoUrl, title) {
-    // Convert S3 URL to HTTPS if needed
-    let playableUrl = videoUrl;
-    if (videoUrl.startsWith('s3://')) {
-      // Simple conversion - in production you'd want proper URL construction
-      playableUrl = videoUrl.replace('s3://', 'https://').replace('/', '.s3.amazonaws.com/');
+  playVideo(bucketLocation, title) {
+    // Convert bucket location to proper HTTPS URL
+    let playableUrl = bucketLocation;
+    
+    // If it's already a full URL, use as-is
+    if (bucketLocation.startsWith('http://') || bucketLocation.startsWith('https://')) {
+      playableUrl = bucketLocation;
+    } 
+    // If it's an S3 path like "videos/filename.mp4", construct the full URL
+    else if (!bucketLocation.includes('://')) {
+      // Get bucket name from config
+      const bucketName = import.meta.env.VITE_AWS_BUCKET_NAME;
+      playableUrl = `https://${bucketName}.s3.amazonaws.com/${bucketLocation}`;
+    }
+    // If it's s3:// format, convert to HTTPS
+    else if (bucketLocation.startsWith('s3://')) {
+      const s3Path = bucketLocation.replace('s3://', '');
+      const parts = s3Path.split('/');
+      const bucket = parts[0];
+      const key = parts.slice(1).join('/');
+      playableUrl = `https://${bucket}.s3.amazonaws.com/${key}`;
     }
     
+    console.log('Playing video:', { bucketLocation, playableUrl });
+    
     // Use existing modal function if available
-    if (typeof openVideoModal === 'function') {
-      openVideoModal(playableUrl, title);
+    if (typeof window.openVideoModal === 'function') {
+      window.openVideoModal(playableUrl, title);
     } else {
       // Fallback - open in new tab
       window.open(playableUrl, '_blank');
