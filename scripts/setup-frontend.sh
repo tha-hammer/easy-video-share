@@ -33,6 +33,8 @@ SECRET_ACCESS_KEY=$(terraform output -raw app_user_secret_access_key 2>/dev/null
 AWS_REGION=$(terraform output -raw aws_region 2>/dev/null)
 API_ENDPOINT=$(terraform output -raw api_gateway_endpoint 2>/dev/null)
 API_VIDEOS_ENDPOINT=$(terraform output -raw api_videos_endpoint 2>/dev/null)
+API_ADMIN_USERS_ENDPOINT=$(terraform output -raw api_admin_users_endpoint 2>/dev/null)
+API_ADMIN_VIDEOS_ENDPOINT=$(terraform output -raw api_admin_videos_endpoint 2>/dev/null)
 COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null)
 COGNITO_CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id 2>/dev/null)
 
@@ -62,6 +64,10 @@ VITE_AWS_SECRET_ACCESS_KEY=${SECRET_ACCESS_KEY}
 # API Configuration
 VITE_API_ENDPOINT=${API_ENDPOINT}
 VITE_API_VIDEOS_ENDPOINT=${API_VIDEOS_ENDPOINT}
+
+# Admin API Configuration
+VITE_API_ADMIN_USERS_ENDPOINT=${API_ADMIN_USERS_ENDPOINT}
+VITE_API_ADMIN_VIDEOS_ENDPOINT=${API_ADMIN_VIDEOS_ENDPOINT}
 
 # Cognito Configuration
 VITE_COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
