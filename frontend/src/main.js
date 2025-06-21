@@ -1,4 +1,12 @@
+// Simple CSS import for custom auth styles only
 import './style.css'
+
+// Remove complex Metronic imports - will use pre-compiled assets instead
+// import 'bootstrap/dist/js/bootstrap.bundle.min.js';
+// import "@keenthemes/ktui/dist/ktui.js";
+// import "./assets/metronic/core/index";
+// import "./assets/metronic/app/layouts/demo1";
+
 import { 
   S3Client, 
   ListObjectsV2Command, 
@@ -14,6 +22,7 @@ import { AWS_CONFIG, UPLOAD_CONFIG, API_CONFIG } from './config.js'
 import { authManager } from './auth.js'
 import { authUI } from './auth-ui.js'
 import { adminUI } from './admin.js'
+import { metronicManager } from './metronic-integration.js'
 
 // ------------------------------------------------------------
 // 0.  Detect device / network and tailor the uploader
@@ -123,112 +132,396 @@ async function initializeMainApp() {
 window.initializeMainApp = initializeMainApp;
 window.updateCurrentUserFromAuth = updateCurrentUserFromAuth;
 
+// Simple dropdown functionality
+function initializeDropdowns() {
+  // Handle user dropdown
+  const userButton = document.querySelector('[data-kt-dropdown-toggle="true"]')
+  const userDropdown = document.querySelector('.kt-dropdown-menu')
+  
+  if (userButton && userDropdown) {
+    userButton.addEventListener('click', (e) => {
+      e.preventDefault()
+      if (userDropdown.style.display === 'block') {
+        userDropdown.style.display = 'none'
+      } else {
+        userDropdown.style.display = 'block'
+        userDropdown.style.zIndex = '9999'
+        userDropdown.style.position = 'absolute'
+      }
+    })
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!userButton.contains(e.target) && !userDropdown.contains(e.target)) {
+        userDropdown.style.display = 'none'
+      }
+    })
+  }
+  
+  // Handle upload dropdown
+  const uploadButton = document.querySelector('[data-kt-menu-toggle]')
+  const uploadDropdown = document.querySelector('.kt-menu-dropdown')
+  
+  if (uploadButton && uploadDropdown) {
+    uploadButton.addEventListener('click', (e) => {
+      e.preventDefault()
+      if (uploadDropdown.style.display === 'block') {
+        uploadDropdown.style.display = 'none'
+      } else {
+        uploadDropdown.style.display = 'block'
+        uploadDropdown.style.zIndex = '9999'
+        uploadDropdown.style.position = 'absolute'
+      }
+    })
+  }
+}
+
 function renderMainApp() {
   const appContainer = document.querySelector('#app')
   appContainer.innerHTML = getMainAppHTML()
+  
+  // Initialize simple dropdown functionality
+  setTimeout(initializeDropdowns, 100)
 }
 
 function getMainAppHTML() {
   return `
-    <div class="container">
-      <header class="header">
-        <h1>🎥 Easy Video Share</h1>
-        <p>Upload and share your videos easily</p>
+    <div class="flex grow flex-col in-data-kt-[sticky-header=on]:pt-(--header-height)">
+      <!-- Header -->
+      <header class="flex items-center shrink-0 bg-background h-(--header-height)" data-kt-sticky="true" data-kt-sticky-class="transition-[height] fixed z-10 top-0 left-0 right-0 shadow-xs backdrop-blur-md bg-white/70 dark:bg-coal-500/70 dark:border-b dark:border-b-light" data-kt-sticky-name="header" data-kt-sticky-offset="100px" id="header">
+        <!-- Container -->
+        <div class="kt-container-fixed flex lg:justify-between items-center gap-2.5">
+          <!-- Logo -->
+          <div class="flex items-center gap-1 lg:w-[400px] grow lg:grow-0">
+            <button class="kt-btn kt-btn-icon kt-btn-ghost -ms-2.5 lg:hidden" data-kt-drawer-toggle="#navbar">
+              <i class="ki-filled ki-menu"></i>
+            </button>
+            <div class="flex items-center gap-2">
+              <div class="flex items-center">
+                <span class="text-2xl">🎥</span>
+              </div>
+              <h3 class="text-mono text-lg font-medium hidden md:block">Easy Video Share</h3>
+            </div>
+            <!-- Navs -->
+            <div class="hidden lg:flex items-center">
+              <div class="border-e border-border h-5 mx-4"></div>
+              <!-- Nav -->
+              <div class="kt-menu kt-menu-default" data-kt-menu="true">
+                <div class="kt-menu-item kt-menu-item-dropdown" data-kt-menu-item-offset="0, 10px" data-kt-menu-item-placement="bottom-start" data-kt-menu-item-placement-rtl="bottom-end" data-kt-menu-item-toggle="dropdown" data-kt-menu-item-trigger="hover">
+                  <button class="kt-menu-toggle text-mono text-sm font-medium">
+                    My Videos
+                    <span class="kt-menu-arrow">
+                      <i class="ki-filled ki-down"></i>
+                    </span>
+                  </button>
+                  <div class="kt-menu-dropdown w-48 py-2">
+                    <div class="kt-menu-item">
+                      <a class="kt-menu-link" href="#" onclick="loadVideos()">
+                        <span class="kt-menu-icon">
+                          <i class="ki-filled ki-video"></i>
+                        </span>
+                        <span class="kt-menu-title">All Videos</span>
+                      </a>
+                    </div>
+                    <div class="kt-menu-item">
+                      <a class="kt-menu-link" href="#" onclick="document.getElementById('video-file').click()">
+                        <span class="kt-menu-icon">
+                          <i class="ki-filled ki-cloud-upload"></i>
+                        </span>
+                        <span class="kt-menu-title">Upload New</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- End of Nav -->
+            </div>
+            <!-- End of Navs -->
+          </div>
+          <!-- End of Logo -->
+          
+          <div class="kt-input w-[36px] lg:w-60">
+            <i class="ki-filled ki-magnifier"></i>
+            <input class="min-w-0" placeholder="Search videos..." type="text" value="" id="video-search">
+            <span class="text-xs text-secondary-foreground text-nowrap hidden lg:inline">ctrl + /</span>
+          </div>
+          
+          <!-- Topbar -->
+          <div class="flex items-center gap-2 lg:gap-3.5 lg:w-[400px] justify-end">
+            <div class="flex items-center gap-2 me-0.5">
+              <!-- User -->
+              <div data-kt-dropdown="true" data-kt-dropdown-offset="10px, 10px" data-kt-dropdown-offset-rtl="-20px, 10px" data-kt-dropdown-placement="bottom-end" data-kt-dropdown-placement-rtl="bottom-start" data-kt-dropdown-trigger="click">
+                <button class="kt-btn kt-btn-ghost kt-btn-icon size-9 rounded-full hover:bg-transparent hover:[&_i]:text-primary" data-kt-dropdown-toggle="true">
+                  <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-semibold text-sm">
+                    <span id="user-initials-header">U</span>
+                  </div>
+                </button>
+                <div class="kt-dropdown-menu w-[280px]" data-kt-dropdown-menu="true">
+                  <div class="flex items-center justify-between px-2.5 py-1.5 gap-1.5">
+                    <div class="flex items-center gap-2">
+                      <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-semibold border-2 border-green-500">
+                        <span id="user-initials-dropdown">U</span>
+                      </div>
+                      <div class="flex flex-col gap-1.5">
+                        <span class="text-sm text-foreground font-semibold leading-none" id="user-name-dropdown">User</span>
+                        <span class="text-xs text-secondary-foreground hover:text-primary font-medium leading-none" id="user-email-dropdown">user@example.com</span>
+                      </div>
+                    </div>
+                    <span class="kt-badge kt-badge-sm kt-badge-primary kt-badge-outline">Pro</span>
+                  </div>
+                  
+                  <ul class="kt-dropdown-menu-sub">
+                    <li><div class="kt-dropdown-menu-separator"></div></li>
+                    
+                    <li>
+                      <a class="kt-dropdown-menu-link" href="#" onclick="loadVideos()">
+                        <i class="ki-filled ki-video"></i>
+                        My Videos
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a class="kt-dropdown-menu-link" href="#" onclick="document.getElementById('upload-form').scrollIntoView()">
+                        <i class="ki-filled ki-cloud-upload"></i>
+                        Upload Video
+                      </a>
+                    </li>
+                    
+                    <li id="admin-main-menu-item" style="display: none;">
+                      <a class="kt-dropdown-menu-link" href="#" id="admin-btn-main">
+                        <i class="ki-filled ki-shield-tick"></i>
+                        Admin Panel
+                      </a>
+                    </li>
+                    
+                    <li data-kt-dropdown="true" data-kt-dropdown-placement="right-start" data-kt-dropdown-trigger="hover">
+                      <button class="kt-dropdown-menu-toggle" data-kt-dropdown-toggle="true">
+                        <i class="ki-filled ki-setting-2"></i>
+                        Settings
+                        <span class="kt-dropdown-menu-indicator">
+                          <i class="ki-filled ki-right text-xs"></i>
+                        </span>
+                      </button>
+                      <div class="kt-dropdown-menu w-[220px]" data-kt-dropdown-menu="true">
+                        <ul class="kt-dropdown-menu-sub">
+                          <li>
+                            <a class="kt-dropdown-menu-link" href="#" onclick="loadVideos()">
+                              <i class="ki-filled ki-video"></i>
+                              Video Library
+                            </a>
+                          </li>
+                          <li>
+                            <a class="kt-dropdown-menu-link" href="#" onclick="document.getElementById('video-search').focus()">
+                              <i class="ki-filled ki-magnifier"></i>
+                              Search Videos
+                            </a>
+                          </li>
+                          <li id="admin-dropdown-item" style="display: none;">
+                            <a class="kt-dropdown-menu-link" href="#" id="admin-btn-dropdown">
+                              <i class="ki-filled ki-shield-tick"></i>
+                              Admin Panel
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </li>
+                    
+                    <li><div class="kt-dropdown-menu-separator"></div></li>
+                  </ul>
+                  
+                  <div class="px-2.5 pt-1.5 mb-2.5 flex flex-col gap-3.5">
+                    <div class="flex items-center gap-2 justify-between">
+                      <span class="flex items-center gap-2">
+                        <i class="ki-filled ki-moon text-base text-muted-foreground"></i>
+                        <span class="font-medium text-2sm">Dark Mode</span>
+                      </span>
+                      <input class="kt-switch" data-kt-theme-switch-state="dark" data-kt-theme-switch-toggle="true" name="check" type="checkbox" value="1">
+                    </div>
+                    <button class="kt-btn kt-btn-outline justify-center w-full" id="logout-btn-dropdown">
+                      Log out
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <!-- End of User -->
+              
+              <div class="border-e border-border h-5"></div>
+              
+              <div class="kt-menu" data-kt-menu="true">
+                <div class="kt-menu-item kt-menu-item-dropdown" data-kt-menu-item-offset="0, 10px" data-kt-menu-item-placement="bottom-end" data-kt-menu-item-placement-rtl="bottom-start" data-kt-menu-item-toggle="dropdown" data-kt-menu-item-trigger="click">
+                  <button class="kt-menu-toggle kt-btn kt-btn-primary">
+                    <i class="ki-filled ki-plus text-sm mr-1"></i>
+                    Upload
+                  </button>
+                  <div class="kt-menu-dropdown kt-menu-default w-full max-w-[200px]" data-kt-menu-dismiss="true">
+                    <div class="kt-menu-item">
+                      <a class="kt-menu-link" href="#" onclick="document.getElementById('video-file').click()">
+                        <span class="kt-menu-icon">
+                          <i class="ki-filled ki-cloud-upload"></i>
+                        </span>
+                        <span class="kt-menu-title">Upload Video</span>
+                      </a>
+                    </div>
+                    <div class="kt-menu-item">
+                      <a class="kt-menu-link" href="#" onclick="document.getElementById('upload-form').scrollIntoView()">
+                        <span class="kt-menu-icon">
+                          <i class="ki-filled ki-scroll"></i>
+                        </span>
+                        <span class="kt-menu-title">Go to Upload Form</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- End of Topbar -->
+          </div>
+          <!-- End of Container -->
+        </div>
       </header>
 
-      <main class="main">
-        <!-- User Info Section -->
-        <div id="user-info" class="user-info">
-          <div class="user-details">
-            <div class="user-email" id="user-email">user@example.com</div>
-            <div class="user-welcome">Welcome back!</div>
-          </div>
-          <div class="user-actions">
-            <button id="admin-btn" class="admin-btn" style="display: none;">🔧 Admin</button>
-            <button id="logout-btn" class="logout-btn">Logout</button>
+      <!-- Main Content -->
+      <div class="flex grow flex-col bg-muted/25">
+        <div class="kt-container-fixed py-5 lg:py-7.5">
+          <!-- Main Grid -->
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 lg:gap-7.5">
+            
+            <!-- Upload Card -->
+            <div class="kt-card kt-card-grid">
+              <div class="kt-card-header py-5 flex-wrap">
+                <h3 class="kt-card-title flex items-center gap-2">
+                  <i class="ki-filled ki-cloud-upload text-xl text-primary"></i>
+                  Upload Video
+                </h3>
+                <div class="text-sm text-muted-foreground">Share your videos securely</div>
+              </div>
+              <div class="kt-card-content">
+                <form id="upload-form" class="space-y-5">
+                  <div>
+                    <label for="video-title" class="kt-label required">Video Title</label>
+                    <input 
+                      type="text" 
+                      id="video-title" 
+                      name="title" 
+                      class="kt-input"
+                      required 
+                      maxlength="100" 
+                      placeholder="Enter a descriptive title for your video..."
+                    />
+                  </div>
+                  
+                  <div>
+                    <label for="video-file" class="kt-label required">Select Video File</label>
+                    <input 
+                      type="file" 
+                      id="video-file" 
+                      name="videoFile" 
+                      class="kt-input"
+                      accept="video/mp4,video/mov,video/avi,video/webm" 
+                      required
+                    />
+                    <div class="text-sm text-muted-foreground mt-1">Max size: 2GB. Supported formats: MP4, MOV, AVI, WebM</div>
+                  </div>
+
+                  <button type="submit" id="upload-btn" class="kt-btn kt-btn-primary w-full">
+                    <span id="upload-text" class="flex items-center gap-2">
+                      <i class="ki-filled ki-cloud-upload text-lg"></i>
+                      Upload Video
+                    </span>
+                    <span id="upload-spinner" class="hidden">
+                      <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    </span>
+                  </button>
+                  
+                  <!-- Enhanced Progress Section -->
+                  <div id="upload-progress" class="kt-card border border-primary mt-5 hidden">
+                    <div class="kt-card-content p-5">
+                      <div class="flex justify-between items-center mb-3">
+                        <span class="text-sm font-medium text-muted-foreground">
+                          Uploading: <span id="progress-filename" class="text-primary font-semibold"></span>
+                        </span>
+                        <span id="progress-percentage" class="text-sm font-bold text-foreground">0%</span>
+                      </div>
+                      
+                      <div class="w-full bg-muted rounded-full h-3 mb-4">
+                        <div id="progress-fill" class="bg-primary h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                      </div>
+                      
+                      <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <div class="text-xs font-medium text-muted-foreground">Progress</div>
+                          <div id="progress-bytes" class="text-sm font-semibold">0 MB / 0 MB</div>
+                        </div>
+                        <div>
+                          <div class="text-xs font-medium text-muted-foreground">Speed</div>
+                          <div id="progress-speed" class="text-sm font-semibold">0 MB/s</div>
+                        </div>
+                        <div>
+                          <div class="text-xs font-medium text-muted-foreground">ETA</div>
+                          <div id="progress-eta" class="text-sm font-semibold">--:--</div>
+                        </div>
+                      </div>
+                      
+                      <div class="flex justify-end gap-2">
+                        <button type="button" id="pause-btn" class="kt-btn kt-btn-outline kt-btn-sm">
+                          <i class="ki-filled ki-pause text-sm"></i>
+                          Pause
+                        </button>
+                        <button type="button" id="cancel-btn" class="kt-btn kt-btn-outline kt-btn-sm">
+                          <i class="ki-filled ki-cross text-sm"></i>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+                
+                <div id="upload-status" class="mt-4"></div>
+              </div>
+            </div>
+
+            <!-- Video List Card -->
+            <div class="kt-card kt-card-grid">
+              <div class="kt-card-header py-5 flex-wrap">
+                <h3 class="kt-card-title flex items-center gap-2">
+                  <i class="ki-filled ki-video text-xl text-primary"></i>
+                  My Videos
+                </h3>
+                <div class="text-sm text-muted-foreground">Your uploaded content</div>
+              </div>
+              <div class="kt-card-content">
+                <div id="video-list" class="space-y-3 max-h-96 overflow-y-auto">
+                  <div class="flex items-center justify-center py-10">
+                    <div class="text-center">
+                      <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                      <div class="text-muted-foreground text-sm mt-2">Loading videos...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <!-- Upload Section -->
-        <section class="upload-section">
-          <h2>Upload Video</h2>
-          <form id="upload-form" class="upload-form">
-            <div class="form-group">
-              <label for="video-title">Video Title</label>
-              <input 
-                type="text" 
-                id="video-title" 
-                name="title" 
-                required 
-                maxlength="100" 
-                placeholder="Enter video title..."
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="video-file">Select Video File</label>
-              <input 
-                type="file" 
-                id="video-file" 
-                name="videoFile" 
-                accept="video/mp4,video/mov,video/avi,video/webm" 
-                required
-              />
-              <small>Max size: 2GB. Supported formats: MP4, MOV, AVI, WebM</small>
-            </div>
-
-            <button type="submit" id="upload-btn" class="upload-btn">
-              <span id="upload-text">Upload Video</span>
-              <div id="upload-spinner" class="spinner hidden"></div>
+      <!-- Video Modal -->
+      <div class="kt-modal" data-kt-modal="true" id="video-modal">
+        <div class="kt-modal-content w-[95%] sm:w-[90%] lg:w-[85%] max-w-6xl max-h-[90vh] top-[5%] mx-auto my-[5vh] flex flex-col">
+          <div class="kt-modal-header flex-shrink-0 px-4 py-3 border-b border-border">
+            <h3 class="kt-modal-title text-base font-semibold" id="modal-title">
+              Video Player
+            </h3>
+            <button class="kt-btn kt-btn-sm kt-btn-icon kt-btn-ghost shrink-0" data-kt-modal-dismiss="true">
+              <i class="ki-filled ki-cross"></i>
             </button>
-            
-            <div id="upload-progress" class="progress-container enhanced hidden">
-              <div class="progress-header">
-                <span class="progress-title">Uploading: <span id="progress-filename"></span></span>
-                <span id="progress-percentage">0%</span>
-              </div>
-              
-              <div class="progress-bar">
-                <div id="progress-fill" class="progress-fill"></div>
-              </div>
-              
-              <div class="progress-stats">
-                <span id="progress-bytes">0 MB / 0 MB</span>
-                <span id="progress-speed">0 MB/s</span>
-                <span id="progress-eta">--:--</span>
-              </div>
-              
-              <div class="progress-actions">
-                <button type="button" id="pause-btn" class="progress-btn">⏸️ Pause</button>
-                <button type="button" id="cancel-btn" class="progress-btn">❌ Cancel</button>
-              </div>
-            </div>
-          </form>
-          
-          <div id="upload-status" class="status-message"></div>
-        </section>
-
-        <!-- Video List Section -->
-        <section class="video-section">
-          <h2>My Videos</h2>
-          <div id="video-list" class="video-list">
-            <div class="loading">Loading videos...</div>
           </div>
-        </section>
-      </main>
-
-              <!-- Video Modal -->
-        <div id="video-modal" class="modal hidden">
-          <div class="modal-content">
-            <button class="modal-close" id="modal-close">&times;</button>
-            <h3 id="modal-title">Video Title</h3>
-            <div class="modal-video-container">
-              <video id="modal-video" controls preload="metadata">
-                Your browser does not support the video tag.
-              </video>
-            </div>
+          <div class="kt-modal-body p-0 flex-1 min-h-0 bg-black">
+            <video id="modal-video" controls preload="metadata" class="w-full h-full object-contain">
+              Your browser does not support the video tag.
+            </video>
           </div>
         </div>
+      </div>
     </div>
   `
 }
@@ -254,28 +547,48 @@ function setupEventListeners() {
   if (pauseBtn) pauseBtn.addEventListener('click', pauseUpload)
   if (cancelBtn) cancelBtn.addEventListener('click', cancelUpload)
 
-  // Logout button
-  const logoutBtn = document.getElementById('logout-btn')
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', handleLogout)
-  }
+  // Logout buttons (multiple in dropdowns)
+  const logoutBtns = document.querySelectorAll('#logout-btn-dropdown')
+  logoutBtns.forEach(btn => {
+    if (btn) {
+      btn.addEventListener('click', handleLogout)
+    }
+  })
 
-  // Admin button
-  const adminBtn = document.getElementById('admin-btn')
-  if (adminBtn) {
-    adminBtn.addEventListener('click', () => {
-      adminUI.show()
+  // Admin buttons (multiple in dropdowns)
+  const adminBtns = document.querySelectorAll('#admin-btn-dropdown, #admin-btn-main')
+  adminBtns.forEach(btn => {
+    if (btn) {
+      btn.addEventListener('click', () => {
+        adminUI.show()
+      })
+    }
+  })
+
+  // Search functionality
+  const searchInput = document.getElementById('video-search')
+  if (searchInput) {
+    searchInput.addEventListener('input', handleVideoSearch)
+    // Handle Ctrl+/ shortcut
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === '/') {
+        e.preventDefault()
+        searchInput.focus()
+      }
     })
   }
 
   // Modal controls
   const modal = document.getElementById('video-modal')
-  const modalClose = document.getElementById('modal-close')
+  const modalClose = document.querySelector('[data-kt-modal-dismiss="true"]')
   
   if (modalClose) modalClose.addEventListener('click', closeModal)
   if (modal) {
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal()
+      // Close modal when clicking on backdrop (not the modal content)
+      if (e.target === modal) {
+        closeModal()
+      }
     })
   }
   
@@ -289,34 +602,98 @@ async function updateUserInfo() {
   // Always get fresh user info from authManager
   const authUser = authManager.getCurrentUser();
   if (authUser && authManager.isUserAuthenticated()) {
-    const userEmailElement = document.getElementById('user-email')
-    if (userEmailElement) {
-      try {
-        // Get user attributes to access email
-        const session = await authManager.getAccessToken()
-        if (session) {
-          // Try to get email from the JWT token claims
-          const userAttributes = await authManager.getUserAttributes()
-          const email = userAttributes?.email || authUser.username || 'User'
-          userEmailElement.textContent = email
-        } else {
-          userEmailElement.textContent = authUser.username || 'User'
-        }
-      } catch (error) {
-        console.error('Error getting user attributes:', error)
-        userEmailElement.textContent = authUser.username || 'User'
+    let email = 'User'
+    let displayName = 'User'
+    
+    try {
+      // Get user attributes to access email
+      const session = await authManager.getAccessToken()
+      if (session) {
+        // Try to get email from the JWT token claims
+        const userAttributes = await authManager.getUserAttributes()
+        email = userAttributes?.email || authUser.username || 'User'
+        displayName = userAttributes?.name || email.split('@')[0] || 'User'
+      } else {
+        email = authUser.username || 'User'
+        displayName = email.split('@')[0] || 'User'
       }
+    } catch (error) {
+      console.error('Error getting user attributes:', error)
+      email = authUser.username || 'User'
+      displayName = email.split('@')[0] || 'User'
     }
 
+    // Update all email elements
+    const emailElements = document.querySelectorAll('#user-email-dropdown')
+    emailElements.forEach(el => {
+      if (el) el.textContent = email
+    })
+
+    // Update display name elements
+    const nameElements = document.querySelectorAll('#user-name-dropdown')
+    nameElements.forEach(el => {
+      if (el) el.textContent = displayName
+    })
+
     // Show/hide admin button based on user's admin status
-    const adminBtn = document.getElementById('admin-btn')
-    if (adminBtn) {
-      if (authManager.isAdmin) {
-        adminBtn.style.display = 'inline-block'
-      } else {
-        adminBtn.style.display = 'none'
+    const adminMenuItems = document.querySelectorAll('#admin-dropdown-item, #admin-main-menu-item')
+    adminMenuItems.forEach(item => {
+      if (item) {
+        if (authManager.isAdmin) {
+          item.style.display = 'block'
+        } else {
+          item.style.display = 'none'
+        }
       }
+    })
+    
+    // Update user initials in all avatars
+    const initials = email.split('@')[0].substring(0, 2).toUpperCase()
+    const initialsElements = document.querySelectorAll('#user-initials-header, #user-initials-dropdown')
+    initialsElements.forEach(el => {
+      if (el) el.textContent = initials
+    })
+  }
+}
+
+// Add video search functionality
+function handleVideoSearch(event) {
+  const searchTerm = event.target.value.toLowerCase().trim()
+  const videoItems = document.querySelectorAll('#video-list .kt-card')
+  
+  videoItems.forEach(item => {
+    const title = item.querySelector('.font-semibold')?.textContent?.toLowerCase() || ''
+    const email = item.querySelector('.truncate')?.textContent?.toLowerCase() || ''
+    
+    if (searchTerm === '' || title.includes(searchTerm) || email.includes(searchTerm)) {
+      item.style.display = 'block'
+    } else {
+      item.style.display = 'none'
     }
+  })
+  
+  // Show "no results" message if no videos are visible
+  const visibleItems = Array.from(videoItems).filter(item => item.style.display !== 'none')
+  const videoList = document.getElementById('video-list')
+  
+  if (searchTerm && visibleItems.length === 0 && videoItems.length > 0) {
+    const noResultsMsg = document.createElement('div')
+    noResultsMsg.className = 'text-center py-8 text-muted-foreground'
+    noResultsMsg.innerHTML = `
+      <div class="text-lg mb-2">No videos found</div>
+      <div class="text-sm">Try adjusting your search terms</div>
+    `
+    noResultsMsg.id = 'no-results'
+    
+    // Remove existing no-results message
+    const existing = document.getElementById('no-results')
+    if (existing) existing.remove()
+    
+    videoList.appendChild(noResultsMsg)
+  } else {
+    // Remove no-results message if search is cleared or results found
+    const existing = document.getElementById('no-results')
+    if (existing) existing.remove()
   }
 }
 
@@ -903,27 +1280,50 @@ function displayVideoList(videoList) {
   
   if (videoList.length === 0) {
     listContainer.innerHTML = `
-      <div class="empty-state">
-        <p>No videos uploaded yet.</p>
-        <p>Upload your first video above!</p>
+      <div class="flex flex-col items-center justify-center py-10 px-5">
+        <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <i class="ki-filled ki-video text-2xl text-primary"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-foreground mb-2">No videos yet</h3>
+        <div class="text-sm text-muted-foreground text-center">Upload your first video to get started!</div>
       </div>
     `
     return
   }
   
   const videoItems = videoList.map(video => `
-    <div class="video-item" data-video-url="${video.videoUrl}" data-title="${video.title}">
-      <div class="video-info">
-        <h3 class="video-title">${video.title}</h3>
-        <div class="video-meta">
-          <span class="user-email">👤 ${video.userEmail}</span>
-          <span class="upload-date">${new Date(video.uploadDate).toLocaleDateString()}</span>
-          <span class="file-size">${(video.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+    <div class="kt-card border border-border rounded-lg p-4 hover:shadow-sm transition-shadow" data-video-url="${video.videoUrl}" data-title="${video.title}">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <i class="ki-filled ki-video text-xl text-primary"></i>
+        </div>
+        <div class="flex-grow min-w-0">
+          <div class="font-semibold text-foreground mb-1 truncate">${video.title}</div>
+          <div class="flex items-center gap-4 text-xs text-muted-foreground">
+            <div class="flex items-center gap-1">
+              <i class="ki-filled ki-profile-circle text-xs"></i>
+              <span class="truncate">${video.userEmail}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <i class="ki-filled ki-calendar text-xs"></i>
+              <span>${new Date(video.uploadDate).toLocaleDateString()}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <i class="ki-filled ki-document text-xs"></i>
+              <span>${(video.fileSize / 1024 / 1024).toFixed(1)} MB</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex-shrink-0">
+          <button 
+            class="kt-btn kt-btn-primary kt-btn-sm" 
+            onclick="openVideoModal('${video.videoUrl}', '${video.title}')"
+          >
+            <i class="ki-filled ki-play text-sm"></i>
+            Play
+          </button>
         </div>
       </div>
-      <button class="play-btn" onclick="openVideoModal('${video.videoUrl}', '${video.title}')">
-        ▶️ Play
-      </button>
     </div>
   `).join('')
   
@@ -935,21 +1335,40 @@ function openVideoModal(videoUrl, title) {
   const modalTitle = document.getElementById('modal-title')
   const modalVideo = document.getElementById('modal-video')
   
+  if (!modal || !modalTitle || !modalVideo) {
+    console.error('Modal elements not found')
+    return
+  }
+  
   modalTitle.textContent = title
   modalVideo.src = videoUrl
-  modal.classList.remove('hidden')
+  
+  // Show modal using Metronic's modal system
+  // Add the modal-open class to trigger Metronic CSS animations
+  modal.setAttribute('data-kt-modal-show', 'true')
+  modal.style.display = 'flex'
+  document.body.classList.add('modal-open')
   
   // Auto-focus on video for keyboard controls
-  modalVideo.focus()
+  setTimeout(() => modalVideo.focus(), 100)
 }
 
 function closeModal() {
   const modal = document.getElementById('video-modal')
   const modalVideo = document.getElementById('modal-video')
   
+  if (!modal || !modalVideo) {
+    console.error('Modal elements not found')
+    return
+  }
+  
   modalVideo.pause()
   modalVideo.src = ''
-  modal.classList.add('hidden')
+  
+  // Hide modal using Metronic's modal system
+  modal.removeAttribute('data-kt-modal-show')
+  modal.style.display = 'none'
+  document.body.classList.remove('modal-open')
 }
 
 // Make modal functions globally available for admin module
@@ -966,14 +1385,22 @@ function updateProgress(percentage, loaded, total) {
     lastProgressBytes = loaded
   }
   
-  // Update progress bar and percentage
-  document.getElementById('progress-fill').style.width = `${percentage}%`
-  document.getElementById('progress-percentage').textContent = `${percentage}%`
+  // Update progress bar and percentage with smooth animation
+  const progressFill = document.getElementById('progress-fill')
+  const progressPercentage = document.getElementById('progress-percentage')
+  
+  if (progressFill && progressPercentage) {
+    progressFill.style.width = `${percentage}%`
+    progressPercentage.textContent = `${percentage}%`
+  }
   
   // Update bytes transferred
   const loadedMB = (loaded / 1024 / 1024).toFixed(1)
   const totalMB = (total / 1024 / 1024).toFixed(1)
-  document.getElementById('progress-bytes').textContent = `${loadedMB} MB / ${totalMB} MB`
+  const progressBytes = document.getElementById('progress-bytes')
+  if (progressBytes) {
+    progressBytes.textContent = `${loadedMB} MB / ${totalMB} MB`
+  }
   
   // Calculate and display upload speed every second
   const timeDiff = (now - lastProgressTime) / 1000 // seconds
@@ -982,7 +1409,10 @@ function updateProgress(percentage, loaded, total) {
     const speedBytesPerSecond = bytesDiff / timeDiff
     const speedMBPerSecond = (speedBytesPerSecond / 1024 / 1024).toFixed(1)
     
-    document.getElementById('progress-speed').textContent = `${speedMBPerSecond} MB/s`
+    const progressSpeed = document.getElementById('progress-speed')
+    if (progressSpeed) {
+      progressSpeed.textContent = `${speedMBPerSecond} MB/s`
+    }
     
     // Calculate ETA
     if (speedBytesPerSecond > 0) {
@@ -991,7 +1421,10 @@ function updateProgress(percentage, loaded, total) {
       const etaMinutes = Math.floor(etaSeconds / 60)
       const etaSecondsRemainder = etaSeconds % 60
       const etaDisplay = `${etaMinutes}:${etaSecondsRemainder.toString().padStart(2, '0')}`
-      document.getElementById('progress-eta').textContent = etaDisplay
+      const progressEta = document.getElementById('progress-eta')
+      if (progressEta) {
+        progressEta.textContent = etaDisplay
+      }
     }
     
     lastProgressTime = now
@@ -1134,7 +1567,10 @@ function setUploadState(isUploading) {
   uploadBtn.disabled = isUploading
   
   if (isUploading) {
-    uploadText.textContent = 'Uploading...'
+    uploadText.innerHTML = `
+      <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+      Uploading...
+    `
     uploadSpinner.classList.remove('hidden')
     progressContainer.classList.remove('hidden')
     
@@ -1145,7 +1581,10 @@ function setUploadState(isUploading) {
     document.getElementById('progress-speed').textContent = '0 MB/s'
     document.getElementById('progress-eta').textContent = '--:--'
   } else {
-    uploadText.textContent = 'Upload Video'
+    uploadText.innerHTML = `
+      <i class="ki-filled ki-cloud-upload text-lg mr-2"></i>
+      Upload Video
+    `
     uploadSpinner.classList.add('hidden')
     progressContainer.classList.add('hidden')
     
@@ -1163,14 +1602,43 @@ function setUploadState(isUploading) {
 
 function showStatus(type, message) {
   const statusDiv = document.getElementById('upload-status')
-  statusDiv.className = `status-message ${type}`
-  statusDiv.textContent = message
+  
+  let alertClass = 'flex items-center gap-3 p-4 rounded-lg border'
+  let icon = ''
+  
+  switch(type) {
+    case 'success':
+      alertClass += ' bg-green-50 border-green-200 text-green-800'
+      icon = `<i class="ki-filled ki-check-circle text-xl text-green-600"></i>`
+      break
+    case 'error':
+      alertClass += ' bg-red-50 border-red-200 text-red-800'
+      icon = `<i class="ki-filled ki-cross-circle text-xl text-red-600"></i>`
+      break
+    case 'warning':
+      alertClass += ' bg-yellow-50 border-yellow-200 text-yellow-800'
+      icon = `<i class="ki-filled ki-warning text-xl text-yellow-600"></i>`
+      break
+    case 'info':
+      alertClass += ' bg-blue-50 border-blue-200 text-blue-800'
+      icon = `<i class="ki-filled ki-information text-xl text-blue-600"></i>`
+      break
+    default:
+      alertClass += ' bg-blue-50 border-blue-200 text-blue-800'
+      icon = `<i class="ki-filled ki-information text-xl text-blue-600"></i>`
+  }
+  
+  statusDiv.className = alertClass
+  statusDiv.innerHTML = `
+    ${icon}
+    <div class="flex-grow text-sm font-medium">${message}</div>
+  `
   
   // Auto-clear success messages
   if (type === 'success') {
     setTimeout(() => {
-      statusDiv.textContent = ''
-      statusDiv.className = 'status-message'
+      statusDiv.innerHTML = ''
+      statusDiv.className = ''
     }, 5000)
   }
 }

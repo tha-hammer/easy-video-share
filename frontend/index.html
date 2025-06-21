@@ -1,14 +1,44 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html class="h-full" data-kt-theme="true" data-kt-theme-mode="light" lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Easy Video Share</title>
     <meta name="description" content="Upload and share videos easily" />
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    
+    <!-- Pre-compiled Metronic CSS -->
+    <link href="/assets/css/styles.css" rel="stylesheet"/>
+    <link href="/assets/vendors/keenicons/styles.bundle.css" rel="stylesheet"/>
+    
+    <!-- Theme Mode Script -->
+    <script>
+      const defaultThemeMode = 'light';
+      let themeMode;
+      if (document.documentElement) {
+        if (localStorage.getItem('kt-theme')) {
+          themeMode = localStorage.getItem('kt-theme');
+        } else if (document.documentElement.hasAttribute('data-kt-theme-mode')) {
+          themeMode = document.documentElement.getAttribute('data-kt-theme-mode');
+        } else {
+          themeMode = defaultThemeMode;
+        }
+        if (themeMode === 'system') {
+          themeMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.classList.add(themeMode);
+      }
+    </script>
   </head>
-  <body>
+  <body class="antialiased flex h-full text-base text-foreground bg-background [--header-height:78px]">
     <div id="app"></div>
+    
+    <!-- Metronic Core JS Bundle -->
+    <script src="/assets/vendors/ktui/ktui.min.js"></script>
+    
     <script type="module" src="/src/main.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
 <script>eruda.init();</script>
