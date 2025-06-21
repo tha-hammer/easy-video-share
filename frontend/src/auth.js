@@ -346,26 +346,52 @@ class AuthManager {
     }
   }
 
-  // Start passwordless login flow
+  // Start passwordless login flow (Gen 2 native)
   async startPasswordlessLogin(email) {
     try {
-      // Generate the same username from email
+      // Transform email to username format (same as registration)
       const username = email.replace(/[@.]/g, '_').toLowerCase();
+      console.log('Passwordless login for:', email, '-> username:', username);
       
       const result = await signIn({
         username: username,
         options: {
-          authFlowType: 'CUSTOM_AUTH'
+          authFlowType: 'USER_AUTH',
+          preferredChallenge: 'EMAIL_OTP'
         }
       });
 
       console.log('Passwordless login started:', result);
+      console.log('Available challenges:', result.nextStep?.availableChallenges);
 
-      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE') {
+      // Handle first factor selection if needed
+      if (result.nextStep?.signInStep === 'CONTINUE_SIGN_IN_WITH_FIRST_FACTOR_SELECTION') {
+        console.log('Selecting EMAIL_OTP as first factor...');
+        
+        const challengeResult = await confirmSignIn({
+          challengeResponse: 'EMAIL_OTP'
+        });
+        
+        console.log('Challenge selection result:', challengeResult);
+        
+        if (challengeResult.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_EMAIL_CODE') {
+          return {
+            success: true,
+            message: 'Please check your email for the login code.',
+            nextStep: challengeResult.nextStep
+          };
+        }
+        
+        return {
+          success: false,
+          error: 'Unexpected response after selecting EMAIL_OTP challenge'
+        };
+      }
+
+      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_EMAIL_CODE') {
         return {
           success: true,
           message: 'Please check your email for the login code.',
-          challengeType: 'CUSTOM_CHALLENGE',
           nextStep: result.nextStep
         };
       }
@@ -383,7 +409,7 @@ class AuthManager {
     }
   }
 
-  // Complete passwordless login with OTP
+  // Complete passwordless login with OTP (Gen 2 native)
   async completePasswordlessLogin(otp) {
     try {
       const result = await confirmSignIn({
