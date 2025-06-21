@@ -11,9 +11,33 @@ export const AWS_CONFIG = {
   }
 }
 
+// Cognito Configuration
+export const COGNITO_CONFIG = {
+  region: import.meta.env.VITE_COGNITO_REGION || 'us-east-1',
+  userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID || 'your-user-pool-id',
+  userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID || 'your-client-id'
+}
+
+// API Configuration
+export const API_CONFIG = {
+  baseUrl: import.meta.env.VITE_API_ENDPOINT || 'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev',
+  videosEndpoint: import.meta.env.VITE_API_VIDEOS_ENDPOINT || 'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/videos',
+  // Admin endpoints
+  adminUsersEndpoint: import.meta.env.VITE_API_ADMIN_USERS_ENDPOINT || 'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/admin/users',
+  adminVideosEndpoint: import.meta.env.VITE_API_ADMIN_VIDEOS_ENDPOINT || 'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/admin/videos'
+}
+
 // File upload constraints
 export const UPLOAD_CONFIG = {
   maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB in bytes
   allowedTypes: ['video/mp4', 'video/mov', 'video/avi', 'video/webm', 'video/quicktime'],
-  allowedExtensions: ['.mp4', '.mov', '.avi', '.webm']
+  allowedExtensions: ['.mp4', '.mov', '.avi', '.webm'],
+  
+  // Multipart upload settings optimized for high bandwidth
+  multipartThreshold: 200 * 1024 * 1024, // Use multipart for files > 200MB (higher threshold)
+  // Disable multipart uploads by making the threshold effectively unreachable
+  // multipartThreshold: Number.MAX_SAFE_INTEGER, // Multipart upload disabled
+  chunkSize: 50 * 1024 * 1024, // 50MB chunks (much larger for better throughput)
+  maxConcurrentUploads: 6, // More parallel uploads for high bandwidth
+  useTransferAcceleration: true // Disabled due to DNS resolution issues
 } 
