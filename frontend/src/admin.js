@@ -171,71 +171,116 @@ class AdminUI {
   getAdminHTML() {
     return `
       <div class="admin-container">
-        <header class="admin-header">
-          <h1>🔧 Admin Dashboard</h1>
-          <div class="admin-nav">
-            <button id="admin-users-tab" class="admin-tab active">Users</button>
-            <button id="admin-videos-tab" class="admin-tab">All Videos</button>
-            <button id="back-to-app" class="back-btn">← Back to App</button>
-            <button id="admin-logout" class="logout-btn">Logout</button>
+        <!-- Header -->
+        <header class="header bg-primary text-white">
+          <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center">
+              <h1 class="mb-0">
+                <i class="bi bi-gear me-2"></i>Admin Dashboard
+              </h1>
+              <div class="d-flex gap-2">
+                <button id="admin-users-tab" class="btn btn-outline-light btn-sm active">
+                  <i class="bi bi-people me-1"></i>Users
+                </button>
+                <button id="admin-videos-tab" class="btn btn-outline-light btn-sm">
+                  <i class="bi bi-collection-play me-1"></i>All Videos
+                </button>
+                <button id="back-to-app" class="btn btn-light btn-sm">
+                  <i class="bi bi-arrow-left me-1"></i>Back to App
+                </button>
+                <button id="admin-logout" class="btn btn-danger btn-sm">
+                  <i class="bi bi-box-arrow-right me-1"></i>Logout
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 
-        <main class="admin-main">
+        <!-- Main Content -->
+        <main class="container-fluid py-4">
+          <!-- Users View -->
           <div id="admin-users-view" class="admin-view active">
-            <div class="view-header">
-              <h2>User Management</h2>
-              <div class="view-stats">
-                <span id="users-count">0 users</span>
-              </div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h2 class="mb-0">
+                <i class="bi bi-people me-2"></i>User Management
+              </h2>
+              <div class="badge bg-primary fs-6" id="users-count">0 users</div>
             </div>
-            <div id="users-list" class="users-list">
-              <div class="loading">Loading users...</div>
+            <div id="users-list" class="row g-3">
+              <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading users...</p>
+              </div>
             </div>
           </div>
 
+          <!-- All Videos View -->
           <div id="admin-videos-view" class="admin-view">
-            <div class="view-header">
-              <h2>All Videos</h2>
-              <div class="view-stats">
-                <span id="videos-count">0 videos</span>
-              </div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h2 class="mb-0">
+                <i class="bi bi-collection-play me-2"></i>All Videos
+              </h2>
+              <div class="badge bg-primary fs-6" id="videos-count">0 videos</div>
             </div>
-            <div id="videos-list" class="videos-list">
-              <div class="loading">Loading videos...</div>
+            <div id="videos-list" class="row g-3">
+              <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading videos...</p>
+              </div>
             </div>
           </div>
 
+          <!-- User Videos View -->
           <div id="user-videos-view" class="admin-view">
-            <div class="view-header">
-              <div class="view-title-section">
-                <h2 id="user-videos-title">User Videos</h2>
-                <button id="back-to-users" class="back-btn">← Back to Users</button>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <div class="d-flex align-items-center gap-3">
+                <h2 class="mb-0" id="user-videos-title">User Videos</h2>
+                <button id="back-to-users" class="btn btn-outline-secondary btn-sm">
+                  <i class="bi bi-arrow-left me-1"></i>Back to Users
+                </button>
               </div>
-              <div class="view-stats">
-                <span id="user-videos-count">0 videos</span>
-              </div>
+              <div class="badge bg-primary fs-6" id="user-videos-count">0 videos</div>
             </div>
-            <div id="user-videos-list" class="videos-list">
-              <div class="loading">Loading user videos...</div>
+            <div id="user-videos-list" class="row g-3">
+              <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading user videos...</p>
+              </div>
             </div>
           </div>
         </main>
 
-        <div id="admin-status" class="admin-status"></div>
-
-        <!-- Video Modal (shared with main app) -->
-        <div id="video-modal" class="modal hidden">
-          <div class="modal-content">
-            <button class="modal-close" id="modal-close">&times;</button>
-            <h3 id="modal-title">Video Title</h3>
-            <div class="modal-video-container">
-              <video id="modal-video" controls preload="metadata">
-                Your browser does not support the video tag.
-              </video>
-            </div>
-          </div>
+        <!-- Status Alert -->
+        <div id="admin-status" class="position-fixed bottom-0 start-50 translate-middle-x mb-3" style="z-index: 1050; display: none;">
         </div>
+
+                 <!-- Video Modal -->
+         <div class="modal fade" id="video-modal" tabindex="-1" aria-labelledby="video-modal-title" aria-hidden="true">
+           <div class="modal-dialog modal-dialog-centered" style="max-width: 90vw; max-height: 90vh;">
+             <div class="modal-content" style="max-height: 90vh; overflow: hidden;">
+               <div class="modal-header">
+                 <h5 class="modal-title" id="modal-title">
+                   <i class="bi bi-play-circle me-2"></i>Video Player
+                 </h5>
+                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+               </div>
+               <div class="modal-body p-0" style="max-height: calc(90vh - 60px); overflow: hidden;">
+                 <div class="modal-video-container" style="position: relative; width: 100%;">
+                   <video id="modal-video" controls preload="metadata" 
+                          style="width: 100%; max-width: 100%; max-height: calc(90vh - 60px); object-fit: contain; background: #000; display: block;">
+                     Your browser does not support the video tag.
+                   </video>
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
       </div>
     `;
   }
@@ -335,23 +380,45 @@ class AdminUI {
     const container = document.getElementById('users-list');
     
     if (users.length === 0) {
-      container.innerHTML = '<div class="empty-state">No users found</div>';
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="text-center py-5">
+            <i class="bi bi-people display-1 text-muted"></i>
+            <h4 class="mt-3 text-muted">No users found</h4>
+            <p class="text-muted">Users will appear here once they register</p>
+          </div>
+        </div>
+      `;
       return;
     }
 
     const html = users.map(user => `
-      <div class="user-card">
-        <div class="user-info">
-          <div class="user-email">${user.email || 'N/A'}</div>
-          <div class="user-details">
-            <span class="user-status status-${user.status?.toLowerCase()}">${user.status}</span>
-            <span class="user-created">Created: ${this.adminManager.formatDate(user.created)}</span>
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-person-circle display-6 text-primary"></i>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <h5 class="card-title mb-1">${user.email || 'N/A'}</h5>
+                <span class="badge bg-${user.status?.toLowerCase() === 'confirmed' ? 'success' : 'warning'} mb-1">
+                  ${user.status || 'Unknown'}
+                </span>
+              </div>
+            </div>
+            <p class="card-text">
+              <small class="text-muted">
+                <i class="bi bi-calendar me-1"></i>
+                Created: ${this.adminManager.formatDate(user.created)}
+              </small>
+            </p>
           </div>
-        </div>
-        <div class="user-actions">
-          <button class="view-videos-btn" onclick="adminUI.viewUserVideos('${user.userId}', '${user.email}')">
-            View Videos
-          </button>
+          <div class="card-footer bg-transparent">
+            <button class="btn btn-primary btn-sm w-100" onclick="adminUI.viewUserVideos('${user.userId}', '${user.email}')">
+              <i class="bi bi-collection-play me-1"></i>View Videos
+            </button>
+          </div>
         </div>
       </div>
     `).join('');
@@ -364,27 +431,54 @@ class AdminUI {
     const container = document.getElementById('videos-list');
     
     if (videos.length === 0) {
-      container.innerHTML = '<div class="empty-state">No videos found</div>';
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="text-center py-5">
+            <i class="bi bi-collection-play display-1 text-muted"></i>
+            <h4 class="mt-3 text-muted">No videos found</h4>
+            <p class="text-muted">Videos will appear here once users start uploading</p>
+          </div>
+        </div>
+      `;
       return;
     }
 
     const html = videos.map(video => `
-      <div class="video-card">
-        <div class="video-info">
-          <div class="video-title">${video.title}</div>
-          <div class="video-details">
-            <span class="video-user">User: ${video.user_email || video.user_id}</span>
-            <span class="video-date">Uploaded: ${this.adminManager.formatDate(video.upload_date)}</span>
-            <span class="video-size">Size: ${this.adminManager.formatFileSize(video.file_size)}</span>
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-start mb-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-play-circle-fill display-6 text-primary"></i>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <h5 class="card-title">${video.title}</h5>
+                <p class="card-text text-muted mb-2">
+                  <i class="bi bi-person me-1"></i>${video.user_email || video.user_id}
+                </p>
+                <div class="d-flex flex-wrap gap-2">
+                  <small class="text-muted">
+                    <i class="bi bi-calendar me-1"></i>
+                    ${this.adminManager.formatDate(video.upload_date)}
+                  </small>
+                  <small class="text-muted">
+                    <i class="bi bi-hdd me-1"></i>
+                    ${this.adminManager.formatFileSize(video.file_size)}
+                  </small>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="video-actions">
-          <button class="play-btn" onclick="adminUI.playVideo('${video.bucket_location}', '${video.title}')">
-            ▶️ Play
-          </button>
-          <button class="delete-btn" onclick="adminUI.deleteVideo('${video.video_id}', '${video.bucket_location}', '${video.title}')">
-            🗑️ Delete
-          </button>
+          <div class="card-footer bg-transparent">
+            <div class="d-flex gap-2">
+              <button class="btn btn-success btn-sm flex-fill" onclick="adminUI.playVideo('${video.bucket_location}', '${video.title}')">
+                <i class="bi bi-play me-1"></i>Play
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="adminUI.deleteVideo('${video.video_id}', '${video.bucket_location}', '${video.title}')">
+                <i class="bi bi-trash me-1"></i>Delete
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `).join('');
@@ -412,26 +506,51 @@ class AdminUI {
     const container = document.getElementById('user-videos-list');
     
     if (videos.length === 0) {
-      container.innerHTML = '<div class="empty-state">No videos found for this user</div>';
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="text-center py-5">
+            <i class="bi bi-collection-play display-1 text-muted"></i>
+            <h4 class="mt-3 text-muted">No videos found</h4>
+            <p class="text-muted">This user hasn't uploaded any videos yet</p>
+          </div>
+        </div>
+      `;
       return;
     }
 
     const html = videos.map(video => `
-      <div class="video-card">
-        <div class="video-info">
-          <div class="video-title">${video.title}</div>
-          <div class="video-details">
-            <span class="video-date">Uploaded: ${this.adminManager.formatDate(video.upload_date)}</span>
-            <span class="video-size">Size: ${this.adminManager.formatFileSize(video.file_size)}</span>
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-start mb-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-play-circle-fill display-6 text-primary"></i>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <h5 class="card-title">${video.title}</h5>
+                <div class="d-flex flex-wrap gap-2">
+                  <small class="text-muted">
+                    <i class="bi bi-calendar me-1"></i>
+                    ${this.adminManager.formatDate(video.upload_date)}
+                  </small>
+                  <small class="text-muted">
+                    <i class="bi bi-hdd me-1"></i>
+                    ${this.adminManager.formatFileSize(video.file_size)}
+                  </small>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="video-actions">
-          <button class="play-btn" onclick="adminUI.playVideo('${video.bucket_location}', '${video.title}')">
-            ▶️ Play
-          </button>
-          <button class="delete-btn" onclick="adminUI.deleteVideo('${video.video_id}', '${video.bucket_location}', '${video.title}')">
-            🗑️ Delete
-          </button>
+          <div class="card-footer bg-transparent">
+            <div class="d-flex gap-2">
+              <button class="btn btn-success btn-sm flex-fill" onclick="adminUI.playVideo('${video.bucket_location}', '${video.title}')">
+                <i class="bi bi-play me-1"></i>Play
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="adminUI.deleteVideo('${video.video_id}', '${video.bucket_location}', '${video.title}')">
+                <i class="bi bi-trash me-1"></i>Delete
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `).join('');
@@ -525,13 +644,32 @@ class AdminUI {
   // Show status message
   showStatus(message, type = 'info') {
     const statusEl = document.getElementById('admin-status');
-    statusEl.textContent = message;
-    statusEl.className = `admin-status ${type}`;
+    
+    const alertClass = type === 'error' ? 'danger' : type;
+    const iconClass = type === 'success' ? 'check-circle' : 
+                     type === 'error' ? 'exclamation-triangle' : 
+                     'info-circle';
+    
+    statusEl.innerHTML = `
+      <div class="alert alert-${alertClass} alert-dismissible fade show" role="alert">
+        <i class="bi bi-${iconClass} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    `;
     statusEl.style.display = 'block';
     
+    // Auto-hide after 4 seconds
     setTimeout(() => {
-      statusEl.style.display = 'none';
-    }, 3000);
+      const alert = statusEl.querySelector('.alert');
+      if (alert) {
+        alert.classList.remove('show');
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+          statusEl.innerHTML = '';
+        }, 150);
+      }
+    }, 4000);
   }
 
   // Show error message
