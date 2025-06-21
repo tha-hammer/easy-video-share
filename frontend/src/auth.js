@@ -1,6 +1,6 @@
 // Authentication module using AWS Amplify
 import { Amplify } from 'aws-amplify';
-import { signUp, signIn, signOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, fetchUserAttributes } from 'aws-amplify/auth';
+import { signUp, signIn, signOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, fetchUserAttributes, confirmSignIn, resetPassword, confirmResetPassword } from 'aws-amplify/auth';
 import { COGNITO_CONFIG } from './config.js';
 
 // Configure Amplify
@@ -23,6 +23,7 @@ class AuthManager {
     this.idToken = null;
     this.isAdmin = false;
     this.listeners = [];
+    this.pendingPasswordlessUsername = null;
   }
 
   // Subscribe to auth state changes
@@ -257,6 +258,163 @@ class AuthManager {
         error: error.message
       };
     }
+  }
+
+  // NEW: Start passwordless login flow using native forgot password
+  async startPasswordlessLogin(email) {
+    try {
+      // Generate the same username from email
+      const username = email.replace(/[@.]/g, '_').toLowerCase();
+      
+      console.log('Starting passwordless login for:', username);
+      
+      // Use native Cognito forgot password flow for passwordless authentication
+      // This sends a verification code to the user's email
+      const result = await resetPassword({
+        username: username
+      });
+
+      console.log('Passwordless login result:', result);
+
+      if (result.nextStep?.resetPasswordStep === 'CONFIRM_RESET_PASSWORD_WITH_CODE') {
+        // Store the username for the confirmation step
+        this.pendingPasswordlessUsername = username;
+        
+        return {
+          success: true,
+          message: 'Verification code sent to your email. Use this code to sign in.',
+          challengeType: 'EMAIL_CODE'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Unexpected response from authentication service'
+      };
+    } catch (error) {
+      console.error('Passwordless login error:', error);
+      
+      // Provide user-friendly error messages
+      let errorMessage = error.message;
+      if (error.message.includes('UserNotFoundException')) {
+        errorMessage = 'No account found with this email. Please register first or use password login.';
+      } else if (error.message.includes('NotAuthorizedException')) {
+        errorMessage = 'Account not verified. Please check your email for verification code first.';
+      } else if (error.message.includes('LimitExceededException')) {
+        errorMessage = 'Too many requests. Please wait a moment before trying again.';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  // NEW: Confirm passwordless login with verification code
+  async confirmPasswordlessLogin(confirmationCode, newPassword = null) {
+    try {
+      if (!this.pendingPasswordlessUsername) {
+        throw new Error('No pending passwordless login session');
+      }
+
+      console.log('Confirming passwordless login with code');
+      
+      // Generate a random password for the reset (user won't need to remember this)
+      const tempPassword = newPassword || this.generateSecurePassword();
+      
+      // First, confirm the password reset with the code
+      const resetResult = await confirmResetPassword({
+        username: this.pendingPasswordlessUsername,
+        confirmationCode: confirmationCode,
+        newPassword: tempPassword
+      });
+
+      console.log('Password reset confirmed:', resetResult);
+
+      // Now sign in with the new temporary password
+      const signInResult = await signIn({
+        username: this.pendingPasswordlessUsername,
+        password: tempPassword
+      });
+
+      console.log('Sign in result:', signInResult);
+
+      if (signInResult.isSignedIn) {
+        // Get user info and session
+        const user = await getCurrentUser();
+        const session = await fetchAuthSession();
+
+        this.currentUser = user;
+        this.isAuthenticated = true;
+        this.accessToken = session.tokens?.accessToken?.toString();
+        this.idToken = session.tokens?.idToken?.toString();
+
+        // Check admin status
+        await this.checkAdminStatus();
+        
+        // Clear the pending username
+        this.pendingPasswordlessUsername = null;
+        
+        console.log('Passwordless login successful:', user.username);
+        console.log('Tokens available after passwordless login:', {
+          hasIdToken: !!session.tokens?.idToken,
+          hasAccessToken: !!session.tokens?.accessToken
+        });
+        console.log('Is Admin:', this.isAdmin);
+        
+        this.notify();
+
+        return {
+          success: true,
+          message: 'Passwordless login successful!',
+          user: user
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Failed to complete passwordless login'
+      };
+    } catch (error) {
+      console.error('Passwordless confirmation error:', error);
+      
+      // Provide user-friendly error messages
+      let errorMessage = error.message;
+      if (error.message.includes('CodeMismatchException')) {
+        errorMessage = 'Invalid verification code. Please try again.';
+      } else if (error.message.includes('ExpiredCodeException')) {
+        errorMessage = 'Verification code has expired. Please request a new code.';
+      } else if (error.message.includes('InvalidPasswordException')) {
+        errorMessage = 'There was an issue with the password reset. Please try again.';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  // Helper method to generate a secure random password
+  generateSecurePassword() {
+    const length = 16;
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let password = '';
+    
+    // Ensure we have at least one of each required character type
+    password += 'A'; // uppercase
+    password += 'a'; // lowercase  
+    password += '1'; // number
+    password += '!'; // symbol
+    
+    // Fill the rest randomly
+    for (let i = 4; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    
+    // Shuffle the password
+    return password.split('').sort(() => Math.random() - 0.5).join('');
   }
 
   // Sign out user
