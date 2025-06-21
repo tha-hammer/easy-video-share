@@ -13,81 +13,72 @@ export class AuthUI {
     return `
       <div class="auth-container">
         <div class="auth-card">
-          <h2>🎥 Sign In to Easy Video Share</h2>
+          <div class="text-center mb-4">
+            <h2 class="mb-3">
+              <i class="bi bi-camera-video text-primary me-2"></i>
+              Sign In to Easy Video Share
+            </h2>
+            <p class="text-muted">Welcome back! Please sign in to your account</p>
+          </div>
           
-           <!-- Password Login Form (Default) 
-          <form id="login-form" class="auth-form">
-            <div class="form-group">
-              <label for="login-email">Email</label>
-              <input 
-                type="email" 
-                id="login-email" 
-                name="email" 
-                required 
-                placeholder="Enter your email"
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="login-password">Password</label>
-              <input 
-                type="password" 
-                id="login-password" 
-                name="password" 
-                required 
-                placeholder="Enter your password"
-              />
-            </div>
-
-            <button type="submit" class="auth-btn primary">Sign In with Password</button>
-          </form>
-
-          /*-- Divider --*/
-          <div class="auth-divider">
-            <span>OR</span>
-          </div> -->
-
           <!-- Passwordless Login Form -->
           <form id="passwordless-form" class="auth-form">
             <div class="form-group">
-              <label for="passwordless-email">Email for Passwordless Login</label>
+              <label class="form-label required" for="passwordless-email">
+                <i class="bi bi-envelope me-1"></i>Email for Passwordless Login
+              </label>
               <input 
                 type="email" 
                 id="passwordless-email" 
                 name="email" 
+                class="form-control"
                 required 
-                placeholder="Enter your email"
+                placeholder="Enter your email address"
               />
             </div>
 
-            <button type="submit" class="auth-btn secondary">🚀 Send Login Code</button>
+            <button type="submit" class="btn btn-primary w-100 mb-3">
+              <i class="bi bi-send me-2"></i>Send Login Code
+            </button>
           </form>
 
           <!-- Verification Code Form (Hidden Initially) -->
-          <form id="passwordless-verify-form" class="auth-form" style="display: none;">
+          <form id="passwordless-verify-form" class="auth-form d-none">
             <div class="form-group">
-              <label for="passwordless-code">Verification Code</label>
+              <label class="form-label required" for="passwordless-code">
+                <i class="bi bi-shield-check me-1"></i>Verification Code
+              </label>
               <input 
                 type="text" 
                 id="passwordless-code" 
                 name="code" 
+                class="form-control text-center"
                 required 
-                placeholder="Enter verification code"
+                placeholder="Enter 6-digit code"
                 maxlength="6"
+                style="letter-spacing: 0.5rem; font-size: 1.2rem;"
               />
+              <small class="form-text text-muted">
+                <i class="bi bi-info-circle me-1"></i>Check your email for the verification code
+              </small>
             </div>
 
-            <button type="submit" class="auth-btn primary">✅ Verify & Sign In</button>
-            <button type="button" id="back-to-passwordless" class="auth-btn link">← Back to Send Code</button>
+            <button type="submit" class="btn btn-success w-100 mb-2">
+              <i class="bi bi-check-circle me-2"></i>Verify & Sign In
+            </button>
+            <button type="button" id="back-to-passwordless" class="btn btn-light w-100">
+              <i class="bi bi-arrow-left me-2"></i>Back to Send Code
+            </button>
           </form>
           
-          <div class="auth-links">
-            <p>Don't have an account? 
-              <a href="#" id="show-register">Sign up here</a>
-            </p>
+          <div class="text-center mt-4">
+            <p class="mb-2">Don't have an account?</p>
+            <a href="#" id="show-register" class="btn btn-outline-primary">
+              <i class="bi bi-person-plus me-2"></i>Create Account
+            </a>
           </div>
           
-          <div id="auth-status" class="status-message"></div>
+          <div id="auth-status" class="status-message mt-3"></div>
         </div>
       </div>
     `;
@@ -98,52 +89,76 @@ export class AuthUI {
     return `
       <div class="auth-container">
         <div class="auth-card">
-          <h2>🎥 Join Easy Video Share</h2>
+          <div class="text-center mb-4">
+            <h2 class="mb-3">
+              <i class="bi bi-camera-video text-primary me-2"></i>
+              Join Easy Video Share
+            </h2>
+            <p class="text-muted">Create your account to start sharing videos</p>
+          </div>
+          
           <form id="register-form" class="auth-form">
             <div class="form-group">
-              <label for="register-email">Email</label>
+              <label class="form-label required" for="register-email">
+                <i class="bi bi-envelope me-1"></i>Email Address
+              </label>
               <input 
                 type="email" 
                 id="register-email" 
                 name="email" 
+                class="form-control"
                 required 
-                placeholder="Enter your email"
+                placeholder="Enter your email address"
               />
             </div>
             
             <div class="form-group">
-              <label for="register-password">Password</label>
+              <label class="form-label required" for="register-password">
+                <i class="bi bi-lock me-1"></i>Password
+              </label>
               <input 
                 type="password" 
                 id="register-password" 
                 name="password" 
+                class="form-control"
                 required 
                 placeholder="Choose a strong password"
                 minlength="8"
               />
-              <small>Password must be at least 8 characters with uppercase, lowercase, number, and symbol</small>
+              <div class="form-text">
+                <small class="text-muted">
+                  <i class="bi bi-info-circle me-1"></i>
+                  Password must be at least 8 characters with uppercase, lowercase, number, and symbol
+                </small>
+              </div>
             </div>
 
             <div class="form-group">
-              <label for="register-name">Name (Optional)</label>
+              <label class="form-label" for="register-name">
+                <i class="bi bi-person me-1"></i>Full Name (Optional)
+              </label>
               <input 
                 type="text" 
                 id="register-name" 
                 name="name" 
-                placeholder="Your name"
+                class="form-control"
+                placeholder="Your full name"
               />
             </div>
 
-            <button type="submit" class="auth-btn primary">Create Account</button>
+            <button type="submit" class="btn btn-primary w-100 mb-3">
+              <i class="bi bi-person-plus me-2"></i>Create Account
+            </button>
             
-            <div class="auth-links">
-              <p>Already have an account? 
-                <a href="#" id="show-login">Sign in here</a>
-              </p>
+            <div class="text-center">
+              <p class="mb-2">Already have an account?</p>
+              <a href="#" id="show-login" class="btn btn-outline-primary">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+              </a>
             </div>
           </form>
           
-          <div id="auth-status" class="status-message"></div>
+          <div id="auth-status" class="status-message mt-3"></div>
         </div>
       </div>
     `;
@@ -154,35 +169,50 @@ export class AuthUI {
     return `
       <div class="auth-container">
         <div class="auth-card">
-          <h2>📧 Verify Your Email</h2>
-          <p>We've sent a verification code to <strong>${this.pendingEmail}</strong></p>
+          <div class="text-center mb-4">
+            <div class="mb-3">
+              <i class="bi bi-envelope-check text-primary" style="font-size: 3rem;"></i>
+            </div>
+            <h2 class="mb-3">Verify Your Email</h2>
+            <div class="alert alert-info border-0" role="alert">
+              <i class="bi bi-info-circle me-2"></i>
+              We've sent a verification code to <strong>${this.pendingEmail}</strong>
+            </div>
+          </div>
           
           <form id="verify-form" class="auth-form">
             <div class="form-group">
-              <label for="verification-code">Verification Code</label>
+              <label class="form-label required" for="verification-code">
+                <i class="bi bi-shield-check me-1"></i>Verification Code
+              </label>
               <input 
                 type="text" 
                 id="verification-code" 
                 name="code" 
+                class="form-control text-center"
                 required 
                 placeholder="Enter 6-digit code"
                 maxlength="6"
+                style="letter-spacing: 0.5rem; font-size: 1.2rem;"
               />
             </div>
 
-            <button type="submit" class="auth-btn primary">Verify Email</button>
+            <button type="submit" class="btn btn-success w-100 mb-3">
+              <i class="bi bi-check-circle me-2"></i>Verify Email
+            </button>
             
-            <div class="auth-links">
-              <p>Didn't receive the code? 
-                <a href="#" id="resend-code">Resend verification code</a>
-              </p>
-              <p>
-                <a href="#" id="back-to-login">Back to login</a>
-              </p>
+            <div class="text-center">
+              <p class="mb-2">Didn't receive the code?</p>
+              <a href="#" id="resend-code" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-clockwise me-1"></i>Resend Code
+              </a>
+              <a href="#" id="back-to-login" class="btn btn-light btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Login
+              </a>
             </div>
           </form>
           
-          <div id="auth-status" class="status-message"></div>
+          <div id="auth-status" class="status-message mt-3"></div>
         </div>
       </div>
     `;
@@ -207,6 +237,18 @@ export class AuthUI {
     
     appContainer.innerHTML = html;
     this.setupEventListeners();
+    
+    // Initialize Bootstrap tooltips if needed
+    this.initializeBootstrapComponents();
+  }
+
+  // Initialize Bootstrap components
+  initializeBootstrapComponents() {
+    // Focus on first input
+    const firstInput = document.querySelector('.auth-form input');
+    if (firstInput) {
+      setTimeout(() => firstInput.focus(), 100);
+    }
   }
 
   // Setup event listeners for auth forms
@@ -276,6 +318,15 @@ export class AuthUI {
     if (backToPasswordless) {
       backToPasswordless.addEventListener('click', this.handleBackToPasswordless.bind(this));
     }
+
+    // Auto-format verification code inputs
+    const codeInputs = document.querySelectorAll('input[maxlength="6"]');
+    codeInputs.forEach(input => {
+      input.addEventListener('input', (e) => {
+        // Auto-uppercase and filter only alphanumeric
+        e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      });
+    });
   }
 
   // Handle login form submission
@@ -292,8 +343,11 @@ export class AuthUI {
     }
 
     this.showStatus('info', 'Signing in...');
+    this.setFormLoading(event.target, true);
     
     const result = await authManager.login(email, password);
+    
+    this.setFormLoading(event.target, false);
     
     if (result.success) {
       this.showStatus('success', result.message);
@@ -322,8 +376,11 @@ export class AuthUI {
     }
 
     this.showStatus('info', 'Creating account...');
+    this.setFormLoading(event.target, true);
     
     const result = await authManager.register(email, password, name || null);
+    
+    this.setFormLoading(event.target, false);
     
     if (result.success) {
       this.pendingEmail = email;
@@ -348,8 +405,11 @@ export class AuthUI {
     }
 
     this.showStatus('info', 'Verifying...');
+    this.setFormLoading(event.target, true);
     
     const result = await authManager.confirmRegistration(this.pendingEmail, code);
+    
+    this.setFormLoading(event.target, false);
     
     if (result.success) {
       this.showStatus('success', result.message);
@@ -389,8 +449,11 @@ export class AuthUI {
     }
 
     this.showStatus('info', 'Sending login code...');
+    this.setFormLoading(event.target, true);
     
     const result = await authManager.startPasswordlessLogin(email);
+    
+    this.setFormLoading(event.target, false);
     
     if (result.success) {
       this.showStatus('success', result.message);
@@ -401,8 +464,14 @@ export class AuthUI {
       const verifyForm = document.getElementById('passwordless-verify-form');
       
       if (passwordlessForm && verifyForm) {
-        passwordlessForm.style.display = 'none';
-        verifyForm.style.display = 'block';
+        passwordlessForm.classList.add('d-none');
+        verifyForm.classList.remove('d-none');
+        
+        // Focus on code input
+        const codeInput = document.getElementById('passwordless-code');
+        if (codeInput) {
+          setTimeout(() => codeInput.focus(), 100);
+        }
       }
     } else {
       this.showStatus('error', result.error);
@@ -422,8 +491,11 @@ export class AuthUI {
     }
 
     this.showStatus('info', 'Verifying code...');
+    this.setFormLoading(event.target, true);
     
     const result = await authManager.confirmPasswordlessLogin(code);
+    
+    this.setFormLoading(event.target, false);
     
     if (result.success) {
       this.showStatus('success', result.message);
@@ -442,8 +514,8 @@ export class AuthUI {
     const verifyForm = document.getElementById('passwordless-verify-form');
     
     if (passwordlessForm && verifyForm) {
-      passwordlessForm.style.display = 'block';
-      verifyForm.style.display = 'none';
+      passwordlessForm.classList.remove('d-none');
+      verifyForm.classList.add('d-none');
     }
     
     // Clear the verification code input
@@ -456,20 +528,73 @@ export class AuthUI {
     this.showStatus('info', 'Enter your email to receive a new login code');
   }
 
+  // Set form loading state
+  setFormLoading(form, isLoading) {
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const inputs = form.querySelectorAll('input, button');
+    
+    if (isLoading) {
+      // Disable all inputs and buttons
+      inputs.forEach(input => input.disabled = true);
+      
+      // Add loading spinner to submit button
+      if (submitBtn) {
+        const originalHTML = submitBtn.innerHTML;
+        submitBtn.dataset.originalHTML = originalHTML;
+        submitBtn.innerHTML = `
+          <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+          Loading...
+        `;
+      }
+    } else {
+      // Re-enable all inputs and buttons
+      inputs.forEach(input => input.disabled = false);
+      
+      // Restore submit button
+      if (submitBtn && submitBtn.dataset.originalHTML) {
+        submitBtn.innerHTML = submitBtn.dataset.originalHTML;
+        delete submitBtn.dataset.originalHTML;
+      }
+    }
+  }
+
   // Show status message
   showStatus(type, message) {
     const statusDiv = document.getElementById('auth-status');
     if (statusDiv) {
-      statusDiv.className = `status-message ${type}`;
-      statusDiv.textContent = message;
+      statusDiv.className = `alert alert-${this.getBootstrapAlertClass(type)} border-0`;
+      statusDiv.innerHTML = `
+        <i class="bi ${this.getStatusIcon(type)} me-2"></i>
+        ${message}
+      `;
+      statusDiv.style.display = 'block';
       
       // Auto-clear success messages
       if (type === 'success') {
         setTimeout(() => {
-          statusDiv.textContent = '';
-          statusDiv.className = 'status-message';
+          statusDiv.style.display = 'none';
         }, 5000);
       }
+    }
+  }
+
+  // Get Bootstrap alert class for status type
+  getBootstrapAlertClass(type) {
+    switch (type) {
+      case 'success': return 'success';
+      case 'error': return 'danger';
+      case 'info': return 'info';
+      default: return 'secondary';
+    }
+  }
+
+  // Get icon for status type
+  getStatusIcon(type) {
+    switch (type) {
+      case 'success': return 'bi-check-circle';
+      case 'error': return 'bi-exclamation-triangle';
+      case 'info': return 'bi-info-circle';
+      default: return 'bi-info-circle';
     }
   }
 }
