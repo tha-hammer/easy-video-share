@@ -1,0 +1,11 @@
+/* KTUI styles (without Tailwind) */
+@import '@keenthemes/ktui/styles.css';
+
+/* Theme configs */
+@import "./config.ktui";
+
+/* Metronic components  */
+@import "./components/index";
+
+/* Demos */
+@import "./demos/demo1.css";
