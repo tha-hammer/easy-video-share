@@ -679,6 +679,29 @@ resource "aws_api_gateway_method_response" "admin_user_videos_options_response" 
   }
 }
 
+# API Gateway integration responses for videos endpoint
+resource "aws_api_gateway_integration_response" "videos_post_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_resource.id
+  http_method = aws_api_gateway_method.videos_post.http_method
+  status_code = aws_api_gateway_method_response.videos_post_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "videos_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_resource.id
+  http_method = aws_api_gateway_method.videos_get.http_method
+  status_code = aws_api_gateway_method_response.videos_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
 # API Gateway integration response for OPTIONS
 resource "aws_api_gateway_integration_response" "videos_options_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -809,6 +832,10 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration.admin_users_options_integration,
     aws_api_gateway_integration.admin_videos_options_integration,
     aws_api_gateway_integration.admin_user_videos_options_integration,
+    # Add videos integration responses
+    aws_api_gateway_integration_response.videos_post_integration_response,
+    aws_api_gateway_integration_response.videos_get_integration_response,
+    aws_api_gateway_integration_response.videos_options_integration_response,
     # Add admin integration responses
     aws_api_gateway_integration_response.admin_users_get_integration_response,
     aws_api_gateway_integration_response.admin_videos_get_integration_response,
@@ -830,6 +857,10 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
       aws_api_gateway_integration.videos_post_integration.id,
       aws_api_gateway_integration.videos_get_integration.id,
       aws_api_gateway_integration.videos_options_integration.id,
+      # Videos integration responses
+      aws_api_gateway_integration_response.videos_post_integration_response.id,
+      aws_api_gateway_integration_response.videos_get_integration_response.id,
+      aws_api_gateway_integration_response.videos_options_integration_response.id,
       aws_api_gateway_authorizer.cognito_authorizer.id,
       # Admin resources
       aws_api_gateway_resource.admin_resource.id,
@@ -889,6 +920,17 @@ resource "aws_cognito_user_pool" "video_app_users" {
   alias_attributes         = ["email"]
   auto_verified_attributes = ["email"]
 
+  # CRITICAL: Prevent accidental recreation that would destroy user data
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      # These attributes cause recreation - ignore changes to prevent data loss
+      alias_attributes,
+      username_attributes,
+      username_configuration
+    ]
+  }
+
   # Password policy (strong default)
   password_policy {
     minimum_length    = 8
@@ -926,6 +968,10 @@ resource "aws_cognito_user_group" "admin_group" {
   user_pool_id = aws_cognito_user_pool.video_app_users.id
   description  = "Administrator group with full access to all users and videos"
   precedence   = 1
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Cognito User Pool Group for Regular Users
@@ -934,6 +980,10 @@ resource "aws_cognito_user_group" "user_group" {
   user_pool_id = aws_cognito_user_pool.video_app_users.id
   description  = "Regular user group with access to own videos only"
   precedence   = 2
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Cognito User Pool Client for frontend application
