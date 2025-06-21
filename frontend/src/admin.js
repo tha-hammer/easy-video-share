@@ -229,9 +229,11 @@ class AdminUI {
           <div class="modal-content">
             <button class="modal-close" id="modal-close">&times;</button>
             <h3 id="modal-title">Video Title</h3>
-            <video id="modal-video" controls>
-              Your browser does not support the video tag.
-            </video>
+            <div class="modal-video-container">
+              <video id="modal-video" controls preload="metadata">
+                Your browser does not support the video tag.
+              </video>
+            </div>
           </div>
         </div>
       </div>
