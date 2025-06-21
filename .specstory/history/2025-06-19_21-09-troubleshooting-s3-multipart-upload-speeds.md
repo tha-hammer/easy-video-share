@@ -642,3 +642,43 @@ That gives you:
 
 ---
 
+_**User**_
+
+error in mobile console "can't find variable: finishUpload"
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+<details>
+            <summary>Grep search for "return new Promise\(" • **2** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L417 | `return new Promise((resolve, reject) => {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L531 | `return new Promise((resolve, reject) => {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L568 | `return new Promise((resolve, reject) => {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L417 | `return new Promise((resolve, reject) => {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L531 | `return new Promise((resolve, reject) => {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L568 | `return new Promise((resolve, reject) => {` |
+
+</details>
+
+---
+
+
+
+---
+
+Read file: frontend/src/main.js
+
+---
+
+
+
+---
+
