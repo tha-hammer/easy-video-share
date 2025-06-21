@@ -365,6 +365,13 @@ data "archive_file" "admin_lambda_zip" {
   source_dir  = "${path.module}/admin-lambda"
 }
 
+# Create Auth Lambdas deployment package
+data "archive_file" "auth_lambdas_zip" {
+  type        = "zip"
+  output_path = "auth_lambdas_function.zip"
+  source_dir  = "${path.module}/auth-lambdas"
+}
+
 # API Gateway REST API
 resource "aws_api_gateway_rest_api" "video_api" {
   name        = "${var.project_name}-api"
@@ -881,6 +888,160 @@ resource "aws_api_gateway_stage" "video_api_stage" {
   }
 }
 
+# IAM role for auth Lambda functions
+resource "aws_iam_role" "auth_lambda_execution_role" {
+  name = "${var.project_name}-auth-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM policy for auth Lambda functions
+resource "aws_iam_role_policy" "auth_lambda_policy" {
+  name = "${var.project_name}-auth-lambda-policy"
+  role = aws_iam_role.auth_lambda_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Lambda function for define auth challenge
+resource "aws_lambda_function" "define_auth_challenge" {
+  filename         = "auth_lambdas_function.zip"
+  function_name    = "${var.project_name}-define-auth-challenge"
+  role            = aws_iam_role.auth_lambda_execution_role.arn
+  handler         = "define-auth-challenge.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+
+  source_code_hash = data.archive_file.auth_lambdas_zip.output_base64sha256
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Lambda function for create auth challenge
+resource "aws_lambda_function" "create_auth_challenge" {
+  filename         = "auth_lambdas_function.zip"
+  function_name    = "${var.project_name}-create-auth-challenge"
+  role            = aws_iam_role.auth_lambda_execution_role.arn
+  handler         = "create-auth-challenge.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+
+  source_code_hash = data.archive_file.auth_lambdas_zip.output_base64sha256
+
+  environment {
+    variables = {
+      FROM_EMAIL = "noreply@${var.domain_name != "" ? var.domain_name : "easyvideoshare.com"}"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Lambda function for verify auth challenge response
+resource "aws_lambda_function" "verify_auth_challenge" {
+  filename         = "auth_lambdas_function.zip"
+  function_name    = "${var.project_name}-verify-auth-challenge"
+  role            = aws_iam_role.auth_lambda_execution_role.arn
+  handler         = "verify-auth-challenge.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+
+  source_code_hash = data.archive_file.auth_lambdas_zip.output_base64sha256
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Lambda function for pre authentication
+resource "aws_lambda_function" "pre_auth_otp" {
+  filename         = "auth_lambdas_function.zip"
+  function_name    = "${var.project_name}-pre-auth"
+  role            = aws_iam_role.auth_lambda_execution_role.arn
+  handler         = "pre-auth.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+
+  source_code_hash = data.archive_file.auth_lambdas_zip.output_base64sha256
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Lambda permissions for Cognito to invoke auth functions
+resource "aws_lambda_permission" "cognito_define_auth_challenge" {
+  statement_id  = "AllowCognitoInvokeDefineAuthChallenge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.define_auth_challenge.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.video_app_users.arn
+}
+
+resource "aws_lambda_permission" "cognito_create_auth_challenge" {
+  statement_id  = "AllowCognitoInvokeCreateAuthChallenge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.create_auth_challenge.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.video_app_users.arn
+}
+
+resource "aws_lambda_permission" "cognito_verify_auth_challenge" {
+  statement_id  = "AllowCognitoInvokeVerifyAuthChallenge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.verify_auth_challenge.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.video_app_users.arn
+}
+
+resource "aws_lambda_permission" "cognito_pre_auth" {
+  statement_id  = "AllowCognitoInvokePreAuth"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pre_auth_otp.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.video_app_users.arn
+}
+
 # Cognito User Pool for authentication
 resource "aws_cognito_user_pool" "video_app_users" {
   name = "${var.project_name}-users"
@@ -913,6 +1074,18 @@ resource "aws_cognito_user_pool" "video_app_users" {
     }
   }
 
+  # Enable passwordless authentication
+  lambda_config {
+    # Pre-authentication lambda for OTP validation
+    pre_authentication = aws_lambda_function.pre_auth_otp.arn
+    # Create auth challenge lambda for OTP generation
+    create_auth_challenge = aws_lambda_function.create_auth_challenge.arn
+    # Define auth challenge lambda to determine challenge type
+    define_auth_challenge = aws_lambda_function.define_auth_challenge.arn
+    # Verify auth challenge response lambda for OTP verification
+    verify_auth_challenge_response = aws_lambda_function.verify_auth_challenge.arn
+  }
+
   tags = {
     Name        = "Video App User Pool"
     Environment = var.environment
@@ -941,12 +1114,13 @@ resource "aws_cognito_user_pool_client" "video_app_client" {
   name         = "${var.project_name}-client"
   user_pool_id = aws_cognito_user_pool.video_app_users.id
 
-      # Authentication flows for web application
-    explicit_auth_flows = [
-      "ALLOW_USER_SRP_AUTH",
-      "ALLOW_USER_PASSWORD_AUTH",
-      "ALLOW_REFRESH_TOKEN_AUTH"
-    ]
+  # Authentication flows for web application (including passwordless)
+  explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_CUSTOM_AUTH"  # Enable custom auth for passwordless
+  ]
 
   # Token configuration
   access_token_validity  = 1    # 1 hour

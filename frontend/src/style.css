@@ -431,18 +431,22 @@ body {
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 .modal-content {
   background: white;
   border-radius: 16px;
   padding: 30px;
-  max-width: 90vw;
-  max-height: 90vh;
+  max-width: 95vw;
+  max-height: 95vh;
+  width: fit-content;
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 .modal-close {
@@ -455,6 +459,7 @@ body {
   cursor: pointer;
   color: #718096;
   line-height: 1;
+  z-index: 1001;
 }
 
 .modal-close:hover {
@@ -465,13 +470,17 @@ body {
   color: #2d3748;
   font-size: 1.3rem;
   margin-right: 40px;
+  flex-shrink: 0;
 }
 
 #modal-video {
   width: 100%;
-  max-width: 800px;
   height: auto;
+  max-width: min(90vw, 1200px);
+  max-height: calc(95vh - 120px); /* Account for title and padding */
   border-radius: 8px;
+  object-fit: contain;
+  background: #000;
 }
 
 /* Utility classes */
@@ -508,6 +517,18 @@ body {
   .modal-content {
     padding: 20px;
     margin: 10px;
+    max-width: 98vw;
+    max-height: 98vh;
+  }
+  
+  #modal-video {
+    max-width: 95vw;
+    max-height: calc(98vh - 100px);
+  }
+  
+  #modal-title {
+    font-size: 1.1rem;
+    margin-right: 30px;
   }
 }
 
@@ -547,6 +568,35 @@ body {
   .progress-btn {
     flex: 1;
     max-width: 120px;
+  }
+
+  /* Modal adjustments for very small screens */
+  .modal {
+    padding: 5px;
+  }
+  
+  .modal-content {
+    padding: 15px;
+    margin: 5px;
+    max-width: 99vw;
+    max-height: 99vh;
+    gap: 15px;
+  }
+  
+  #modal-video {
+    max-width: 97vw;
+    max-height: calc(99vh - 80px);
+  }
+  
+  #modal-title {
+    font-size: 1rem;
+    margin-right: 25px;
+  }
+  
+  .modal-close {
+    top: 10px;
+    right: 15px;
+    font-size: 1.5rem;
   }
 }
 
@@ -606,6 +656,50 @@ body {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.auth-method-section {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8f9fa;
+}
+
+.auth-method-section h3 {
+  margin: 0 0 0.5rem 0;
+  color: #2d3748;
+  font-size: 1.1rem;
+}
+
+.auth-method-section p {
+  margin: 0 0 1rem 0;
+  color: #718096;
+  font-size: 0.9rem;
+}
+
+.auth-divider {
+  text-align: center;
+  margin: 1.5rem 0;
+  position: relative;
+}
+
+.auth-divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.auth-divider span {
+  background: white;
+  padding: 0 1rem;
+  color: #718096;
+  font-size: 0.9rem;
+  position: relative;
 }
 
 .auth-form small {
