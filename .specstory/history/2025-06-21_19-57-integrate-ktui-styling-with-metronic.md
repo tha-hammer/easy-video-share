@@ -1551,15 +1551,7 @@ The issue is probably that `bootstrap` is not defined. Let me just revert to the
 
 ---
 
-Now I need to change the modal HTML back to use the simple approach with the `hidden` class:
 
----
-
-
-
----
-
-That should fix the unclosable modal. The modal is now back to the simple CSS-based approach with the `hidden` class that was working before.
 
 ---
 
