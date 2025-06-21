@@ -402,11 +402,846 @@ Now I need to create the Lambda functions for the passwordless authentication fl
 
 ---
 
+```diff
+- 
++ exports.handler = async (event) => {
++   console.log('Define Auth Challenge Event:', JSON.stringify(event, null, 2));
++ 
++   const { request, response } = event;
++   
++   // If user doesn't exist, fail the auth
++   if (request.userNotFound) {
++     response.issueTokens = false;
++     response.failAuthentication = true;
++     response.challengeName = 'CUSTOM_CHALLENGE';
++     return event;
++   }
++ 
++   // First attempt - start with custom challenge (OTP)
++   if (request.session.length === 0) {
++     response.challengeName = 'CUSTOM_CHALLENGE';
++     response.issueTokens = false;
++     response.failAuthentication = false;
++   }
++   // Second attempt - check if the challenge was answered correctly
++   else if (request.session.length === 1 && request.session[0].challengeResult === true) {
++     response.issueTokens = true;
++     response.failAuthentication = false;
++   }
++   // Challenge failed
++   else {
++     response.issueTokens = false;
++     response.failAuthentication = true;
++   }
++ 
++   console.log('Define Auth Challenge Response:', JSON.stringify(response, null, 2));
++   return event;
++ }; 
+```
+
+---
+
+```diff
+- 
++ const { SESClient, SendEmailCommand } = require("@aws-sdk/client-ses");
++ 
++ const sesClient = new SESClient({ region: process.env.AWS_REGION });
++ 
++ exports.handler = async (event) => {
++   console.log('Create Auth Challenge Event:', JSON.stringify(event, null, 2));
++ 
++   const { request, response } = event;
++ 
++   if (request.challengeName === 'CUSTOM_CHALLENGE') {
++     // Generate a 6-digit OTP
++     const otp = Math.floor(100000 + Math.random() * 900000).toString();
++     
++     // Store the OTP in the challenge metadata (Cognito will handle this securely)
++     response.publicChallengeParameters = {
++       email: request.userAttributes.email,
++       trigger: 'passwordless-auth'
++     };
++     
++     response.privateChallengeParameters = {
++       answer: otp
++     };
++     
++     response.challengeMetadata = 'PASSWORDLESS_AUTH';
++ 
++     // Send OTP via email
++     try {
++       const emailParams = {
++         Source: process.env.FROM_EMAIL || 'noreply@easyvideoshare.com',
++         Destination: {
++           ToAddresses: [request.userAttributes.email]
++         },
++         Message: {
++           Subject: {
++             Data: 'Easy Video Share - Your Login Code',
++             Charset: 'UTF-8'
++           },
++           Body: {
++             Html: {
++               Data: `
++                 <html>
++                   <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
++                     <div style="text-align: center; margin-bottom: 30px;">
++                       <h1 style="color: #667eea;">🎥 Easy Video Share</h1>
++                     </div>
++                     
++                     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
++                       <h2 style="color: #2d3748; margin-top: 0;">Your Login Code</h2>
++                       <p style="color: #4a5568; font-size: 16px; line-height: 1.5;">
++                         Use this code to complete your passwordless login:
++                       </p>
++                       
++                       <div style="text-align: center; margin: 20px 0;">
++                         <div style="background: white; border: 2px solid #667eea; border-radius: 8px; 
++                                     display: inline-block; padding: 15px 25px; font-size: 32px; 
++                                     font-weight: bold; color: #667eea; letter-spacing: 8px;">
++                           ${otp}
++                         </div>
++                       </div>
++                       
++                       <p style="color: #718096; font-size: 14px; text-align: center;">
++                         This code will expire in 5 minutes.
++                       </p>
++                     </div>
++                     
++                     <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; color: #718096; font-size: 12px;">
++                       <p>If you didn't request this login code, please ignore this email.</p>
++                       <p>For security, never share this code with anyone.</p>
++                     </div>
++                   </body>
++                 </html>
++               `,
++               Charset: 'UTF-8'
++             },
++             Text: {
++               Data: `
++ Easy Video Share - Your Login Code
++ 
++ Your login code is: ${otp}
++ 
++ This code will expire in 5 minutes.
++ 
++ If you didn't request this login code, please ignore this email.
++ For security, never share this code with anyone.
++               `,
++               Charset: 'UTF-8'
++             }
++           }
++         }
++       };
++ 
++       await sesClient.send(new SendEmailCommand(emailParams));
++       console.log('OTP email sent successfully to:', request.userAttributes.email);
++       
++     } catch (error) {
++       console.error('Failed to send OTP email:', error);
++       // Don't fail the challenge if email sending fails
++       // The OTP is still valid, user might have received it
++     }
++   }
++ 
++   console.log('Create Auth Challenge Response:', JSON.stringify(response, null, 2));
++   return event;
++ }; 
+```
+
+---
+
+```diff
+- 
++ exports.handler = async (event) => {
++   console.log('Verify Auth Challenge Event:', JSON.stringify(event, null, 2));
++ 
++   const { request, response } = event;
++ 
++   if (request.challengeName === 'CUSTOM_CHALLENGE') {
++     // Get the expected answer from the private challenge parameters
++     const expectedAnswer = request.privateChallengeParameters.answer;
++     const providedAnswer = request.challengeAnswer;
++ 
++     console.log('Expected OTP:', expectedAnswer);
++     console.log('Provided OTP:', providedAnswer);
++ 
++     // Verify the OTP (simple string comparison)
++     if (expectedAnswer === providedAnswer) {
++       response.answerCorrect = true;
++       console.log('OTP verification successful');
++     } else {
++       response.answerCorrect = false;
++       console.log('OTP verification failed');
++     }
++   }
++ 
++   console.log('Verify Auth Challenge Response:', JSON.stringify(response, null, 2));
++   return event;
++ }; 
+```
+
+---
+
+
+
+---
+
+```diff
+- 
++ exports.handler = async (event) => {
++   console.log('Pre Authentication Event:', JSON.stringify(event, null, 2));
++ 
++   const { request, response } = event;
++ 
++   // Allow all pre-authentication requests to proceed
++   // This lambda is mainly used for logging and any pre-auth checks
++   
++   console.log('Pre-auth check for user:', request.userAttributes?.email);
++   
++   // You can add additional pre-authentication logic here, such as:
++   // - Rate limiting
++   // - Geo-blocking
++   // - Account status checks
++   // - etc.
++ 
++   // For now, we'll allow all authentication attempts to proceed
++   console.log('Pre-authentication successful for user:', request.userAttributes?.email);
++ 
++   return event;
++ }; 
+```
+
+---
+
+
+
+---
+
+Now let me create a package.json file for the auth lambdas:
+
+---
+
+```diff
+- 
++ {
++   "name": "cognito-auth-lambdas",
++   "version": "1.0.0",
++   "description": "Lambda functions for Cognito passwordless authentication",
++   "main": "index.js",
++   "dependencies": {
++     "@aws-sdk/client-ses": "^3.450.0"
++   },
++   "scripts": {
++     "test": "echo \"Error: no test specified\" && exit 1"
++   },
++   "keywords": ["cognito", "passwordless", "auth", "lambda"],
++   "author": "Easy Video Share",
++   "license": "MIT"
++ } 
+```
+
+---
+
+
+
+---
+
+Now I need to add the Lambda functions and their configurations to the Terraform main.tf file:
+
+---
+
 
 
 ---
 
 
+
+---
+
+Read file: terraform/main.tf
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+Read file: terraform/variables.tf
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+Now let me update the frontend authentication to support passwordless login. I'll add new methods to the auth.js file:
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+Read file: frontend/src/auth-ui.js
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+Read file: frontend/src/auth-ui.js
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+Read file: frontend/src/auth-ui.js
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+```bash
+cd terraform/auth-lambdas && npm install
+```
+
+---
+
+_**User**_
+
+npm ran successfully
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Perfect! Now let's deploy the passwordless authentication infrastructure. First, let me install the dependencies for the auth Lambda functions and then apply the Terraform changes.
+
+---
+
+```bash
+cd terraform && terraform plan
+```
+
+---
+
+_**User**_
+
+terraform apply and terraform plan ran successfully.
+frontend build ran and deployed
+next help me understand if we need to update the setup-frontend.sh script
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Excellent! Let me check the current `setup-frontend.sh` script to see if it needs updates for the passwordless authentication feature.
+
+---
+
+Read file: scripts/setup-frontend.sh
+
+---
+
+Perfect! Looking at the current `setup-frontend.sh` script, **it already includes all the necessary Cognito configuration** for passwordless authentication! The script is already extracting:
+
+- `COGNITO_USER_POOL_ID` - ✅ Already included
+- `COGNITO_CLIENT_ID` - ✅ Already included  
+- `COGNITO_REGION` - ✅ Already included
+
+The script doesn't need any updates because:
+
+1. **All Cognito outputs are already captured** from Terraform
+2. **The frontend environment variables are already configured correctly**
+3. **No additional configuration is needed** for passwordless authentication since it uses the same User Pool and Client
+
+The passwordless authentication feature we just implemented:
+- Uses the existing Cognito User Pool (with new Lambda triggers)
+- Uses the same User Pool Client (with added `ALLOW_CUSTOM_AUTH` flow)
+- Doesn't require any additional environment variables
+
+## ✅ Current Status
+
+Your passwordless authentication is **fully implemented and ready to test**! Here's what's been deployed:
+
+### Backend Infrastructure ✅
+- 4 new Lambda functions for Cognito auth challenges
+- Updated Cognito User Pool with Lambda triggers
+- Enhanced User Pool Client with custom auth flows
+- SES permissions for sending OTP emails
+
+### Frontend Updates ✅
+- New passwordless login UI with dual authentication options
+- Enhanced auth manager with OTP methods
+- Updated styling for the new login interface
+
+### Configuration ✅ 
+- All environment variables properly configured
+- No setup script changes needed
+
+## 🧪 Testing Your Passwordless Authentication
+
+You can now test both authentication methods:
+
+1. **Passwordless Login**: Enter email → Receive OTP → Complete login
+2. **Traditional Login**: Email + password (existing flow)
+
+Try accessing your deployed frontend and test the new "✨ Passwordless Login" option!
+
+Would you like me to help you test the passwordless authentication or would you like to explore any other aspects of the implementation?
+
+---
+
+_**User**_
+
+error on passwordless login:
+Error: Passwordless login error: 
+_AuthError {name: "EmptySignInPassword", underlyingError: undefined, recoverySuggestion: undefined, constructor: ƒ}
+constructor: ƒ class _AuthError extends AmplifyError {↵ constructor(params) {↵ super(params);↵ this.constructor = _AuthError;↵ Object.setPrototypeOf(this, _AuthError.prototype);↵ }↵}
+name: "EmptySignInPassword"
+recoverySuggestion: undefined
+underlyingError: undefined
+message: "password is required to signIn"
+stack: "EmptySignInPassword: password is required to signIn↵ at assertValidationError (http://localhost:5173/node_modules/.vite/deps/chunk-XNCO7GCT.js?v=ae220d34:6449:11)↵ at signInWithSRP (http://localhost:5173/node_modules/.vite/deps/chunk-XNCO7GCT.js?v=ae220d34:9660:3)↵ at signIn (http://localhost:5173/node_modules/.vite/deps/chunk-XNCO7GCT.js?v=ae220d34:9901:14)↵ at async AuthManager.startPasswordlessLogin (http://localhost:5173/src/auth.js:355:22)↵ at async AuthUI.handlePasswordlessLogin (http://localhost:5173/src/auth-ui.js:424:20)"
+get stack: ƒ ()
+set stack: ƒ ()
+[[Prototype]]: Object
+
+at t.value (https://cdn.jsdelivr.net/npm/eruda:8:170303)
+at new t (https://cdn.jsdelivr.net/npm/eruda:8:165416)
+at t.value (https://cdn.jsdelivr.net/npm/eruda:8:185975)
+at https://cdn.jsdelivr.net/npm/eruda:8:187609
+
+I have reverted your initial fix for this issue because it was incorrect.
+
+Let's start with the version of Amplify. Are we using Gen 1 or Gen 2?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+You're absolutely right to ask about the Amplify version! The error suggests I'm using the wrong API for the version you have. Let me check your Amplify version to determine if we're using Gen 1 or Gen 2.
+
+---
+
+Read file: frontend/package.json
+
+---
+
+Perfect! You're using **AWS Amplify Gen 2** (version 6.0.7). The issue is that I was using the wrong syntax for initiating custom authentication in Gen 2.
+
+In Amplify Gen 2, the `signIn` function requires a different approach for custom authentication flows. Let me fix the passwordless login implementation:
+
+---
+
+
+
+---
+
+_**User**_
+
+Let me make sure you actually understand what the fuck you are doing.  Your last solutions were a total fucking shit-show.
+
+here is the code from the docs to override the cognito user pool to enable passwordless sign-in:
+@https://docs.amplify.aws/vue/build-a-backend/auth/modify-resources-with-cdk/#override-cognito-userpool-to-enable-passwordless-sign-in-methods 
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+You're absolutely right, and I apologize for the complete mess. I was implementing the old Gen 1 approach with custom Lambda triggers when Amplify Gen 2 has **built-in passwordless support** that's much simpler.
+
+Looking at the official documentation you provided, the correct approach for **Amplify Gen 2** is to use CDK overrides, not custom Lambda functions.
+
+Let me fix this properly:
+
+## The Correct Gen 2 Approach
+
+We need to:
+1. **Remove all the Lambda function bullshit** I added
+2. **Use CDK overrides** to enable native passwordless support
+3. **Update the frontend** to use the correct Gen 2 APIs
+
+Let me start by updating the Terraform to use the proper Gen 2 configuration:
+
+---
+
+
+
+---
+
+
+
+---
+
+Now let me add the proper Terraform configuration for native passwordless support:
+
+---
+
+
+
+---
+
+Wait, that resource doesn't exist in Terraform. Let me remove all the Lambda functions and use the correct approach with property overrides:
+
+---
+
+
+
+---
+
+
+
+---
+
+Now let me remove all the Lambda function resources that I incorrectly added:
+
+---
+
+
+
+---
+
+Now let me fix the frontend to use the correct Gen 2 passwordless API. According to the documentation, Gen 2 has native `signInWithEmailOTP` functions:
+
+---
+
+
+
+---
+
+
+
+---
+
+Now let me also clean up the unused auth lambda files since we don't need them:
+
+---
+
+Removing the auth-lambdas directory since we're using native Gen 2 passwordless support instead
+
+---
+
+_**User**_
+
+Are you attempting to remove the auth-lambdas directory?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Yes, I was attempting to remove the `auth-lambdas` directory because it's no longer needed. 
+
+Here's why:
+
+## What I Initially Did Wrong
+- I created custom Lambda functions for passwordless auth (the Gen 1 approach)
+- Added complex Lambda triggers to Cognito User Pool
+- Created custom challenge/verify Lambda functions
+
+## What's Actually Needed for Gen 2
+- **Native Cognito EMAIL_OTP support** (no custom Lambdas needed)
+- Simple Terraform property overrides
+- Use `signInWithEmailOTP()` function from Amplify Gen 2
+
+The `auth-lambdas` directory contains:
+- `define-auth-challenge.js`
+- `create-auth-challenge.js` 
+- `verify-auth-challenge.js`
+- `pre-auth.js`
+- `package.json`
+
+**These files are completely unnecessary** for Gen 2 passwordless authentication.
+
+Should I:
+1. **Remove the auth-lambdas directory** and clean up the unused Lambda references?
+2. **Keep it** in case you want to reference the code later?
+
+The Terraform file still has a reference to `auth_lambdas_zip` that should also be removed since we're not deploying those Lambda functions anymore.
+
+What would you prefer?
+
+---
+
+_**User**_
+
+I will remove the auth-lambdas directory. You clean up the unused Lambda references
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Perfect! Let me clean up all the unused Lambda references from the Terraform files.
+
+---
+
+
+
+---
+
+
+
+---
+
+Now let me also remove the unused reference and comment in the Cognito User Pool:
+
+---
+
+
+
+---
+
+Let me check if there are any other references to auth lambdas or related resources:
+
+---
+
+<details>
+            <summary>Grep search for "auth_lambdas" • **1** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///e%3A/Dev/easy-video-share/.specstory/history/2025-06-21_13-11-adjusting-modal-player-for-large-videos.md` | L1093 | `The Terraform file still has a reference to `auth_lambdas_zip` that should also be removed since we're not deploying those Lambda functions anymore.` |
+
+</details>
+
+---
+
+Good, that's just in a markdown file. Let me also check for any remaining domain_name references:
+
+---
+
+<details>
+            <summary>Grep search for "domain_name" • **3** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L15 | `output "bucket_domain_name" {` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L17 | `value       = aws_s3_bucket.video_bucket.bucket_domain_name` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L20 | `output "bucket_regional_domain_name" {` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L22 | `value       = aws_s3_bucket.video_bucket.bucket_regional_domain_name` |
+| `file:///e%3A/Dev/easy-video-share/.specstory/history/2025-06-19_14-43-understanding-project-scope-and-implementation.md` | L737 | `+ output "bucket_domain_name" {` |
+| `file:///e%3A/Dev/easy-video-share/.specstory/history/2025-06-19_14-43-understanding-project-scope-and-implementation.md` | L739 | `+   value       = aws_s3_bucket.video_bucket.bucket_domain_name` |
+| `file:///e%3A/Dev/easy-video-share/.specstory/history/2025-06-19_14-43-understanding-project-scope-and-implementation.md` | L742 | `+ output "bucket_regional_domain_name" {` |
+| `file:///e%3A/Dev/easy-video-share/.specstory/history/2025-06-19_14-43-understanding-project-scope-and-implementation.md` | L744 | `+   value       = aws_s3_bucket.video_bucket.bucket_regional_domain_name` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L15 | `output "bucket_domain_name" {` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L17 | `value       = aws_s3_bucket.video_bucket.bucket_domain_name` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L20 | `output "bucket_regional_domain_name" {` |
+| `file:///e%3A/Dev/easy-video-share/terraform/outputs.tf` | L22 | `value       = aws_s3_bucket.video_bucket.bucket_regional_domain_name` |
+
+</details>
+
+---
+
+
+
+---
+
+Perfect! Those domain_name references in outputs.tf are legitimate S3 bucket domain outputs, not related to the auth Lambda cleanup.
+
+## ✅ Cleanup Complete
+
+I've successfully removed all the unused Lambda references:
+
+### Removed from `terraform/main.tf`:
+- ✅ `data "archive_file" "auth_lambdas_zip"` block
+- ✅ All Lambda function resources (`define_auth_challenge`, `create_auth_challenge`, etc.)
+- ✅ All Lambda IAM roles and policies for auth functions
+- ✅ All Lambda permissions for Cognito triggers
+- ✅ Updated comments to reflect native passwordless approach
+
+### Removed from `terraform/variables.tf`:
+- ✅ `domain_name` variable (was only used for Lambda email configuration)
+
+### What Remains (Correctly):
+- ✅ Cognito User Pool with `ALLOW_USER_AUTH` flow enabled
+- ✅ Standard bucket domain outputs (legitimate S3 outputs)
+- ✅ All existing video and admin functionality
+
+The Terraform configuration is now clean and ready for **Gen 2 native passwordless authentication**. Once you remove the `auth-lambdas` directory, you can run:
+
+```bash
+cd terraform
+terraform plan
+terraform apply
+```
+
+This will clean up the deployed Lambda functions that are no longer needed and enable the proper passwordless configuration.
+
+---
+
+_**User**_
+
+error on local: SyntaxError: The requested module '/node_modules/.vite/deps/aws-amplify_auth.js?v=ae220d34' does not provide an export named 'signInWithEmailOTP'
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+The error indicates that `signInWithEmailOTP` doesn't exist in your version of Amplify Gen 2. Let me check what the correct API is for Amplify v6.
+
+---
+
+<details>
+            <summary>Searched web "Amplify Gen 2 passwordless authentication signInWithEmailOTP API v6" • **6** results</summary>
+        
+| Title | URL |
+|-------|-----|
+| Passwordless Sign-In method with email + OTP response ... | https://github.com/aws-amplify/amplify-js/issues/14195 |
+| Passwordless - AWS Amplify Gen 2 Documentation | https://docs.amplify.aws/react/build-a-backend/auth/concepts/passwordless/ |
+| Sign-up - AWS Amplify Gen 2 Documentation | https://docs.amplify.aws/react/build-a-backend/auth/connect-your-frontend/sign-up/ |
+| API Reference - React - AWS Amplify Gen 2 Documentation | https://docs.amplify.aws/react/build-a-backend/auth/reference/ |
+| Migrate from v5 to v6 - JavaScript - AWS Amplify Gen 1 Documentation | https://docs.amplify.aws/gen1/javascript/build-a-backend/auth/auth-migration-guide/ |
+| Sign-in - AWS Amplify Gen 2 Documentation | https://docs.amplify.aws/react-native/build-a-backend/auth/connect-your-frontend/sign-in/ |
+
+</details>
+
+---
+
+Based on the search results, I can see that the issue is that `signInWithEmailOTP` doesn't exist in Amplify Gen 2. Looking at the official documentation, the correct approach for passwordless email OTP authentication in Amplify Gen 2 is to use the standard `signIn` API with specific options.
+
+Let me check
 
 ---
 
