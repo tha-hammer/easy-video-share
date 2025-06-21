@@ -32,7 +32,7 @@ import { authUI } from './auth-ui.js'
     // mobile / slow network → smaller parts, fewer parallel sockets
     Object.assign(UPLOAD_CONFIG, {
       chunkSize:             8 * MB,   // 8 MB parts
-      maxConcurrentUploads:  3,
+      maxConcurrentUploads:  4,
       useTransferAcceleration: false   // TA often hurts on 4G/5G
     })
     console.log('[AdaptiveConfig] Mobile/slow network – using 8 MB parts, 3 parallel uploads')
@@ -498,6 +498,7 @@ async function uploadWithMultipart(file, key) {
   const totalParts = Math.ceil(file.size / chunkSize)
   const partQueue   = Array.from({ length: totalParts }, (_, i) => i + 1)
   const inFlight    = new Set()
+  let finishUpload
 
   const startNext = async () => {
     if (partQueue.length === 0) return
@@ -520,7 +521,9 @@ async function uploadWithMultipart(file, key) {
       // schedule another as soon as one finishes
       if (partQueue.length) startNext()
       // resolve when everything is done
-      if (partQueue.length === 0 && inFlight.size === 0) finishUpload()
+      if (partQueue.length === 0 && inFlight.size === 0 && typeof finishUpload === 'function') {
+        finishUpload()
+      }
     }
   }
 
@@ -530,7 +533,7 @@ async function uploadWithMultipart(file, key) {
 
   // wait here until `finishUpload` runs
   return new Promise((resolve, reject) => {
-    const finishUpload = async () => {
+    finishUpload = async () => {
       try {
         // Sort by part number
         uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber)
