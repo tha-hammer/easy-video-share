@@ -1104,25 +1104,7 @@ Perfect! Now I can calculate the exact costs for your Lambda invocations. Let me
 | 5 | 468.0 | 0.0585 | $0.00000098 | $0.0000002 | $0.00000118 |
 | 6 | 337.0 | 0.042125 | $0.00000070 | $0.0000002 | $0.00000090 |
 | 7 | 281.0 | 0.035125 | $0.00000059 | $0.0000002 | $0.00000079 |
-| 8 | 237.0 | 0.029625 | $0.00000049 | $0.0000002 | $0.00000069 |
-| 9 | 221.0 | 0.027625 | $0.00000046 | $0.0000002 | $0.00000066 |
-
-## Summary:
-- **Total GB-seconds:** 0.567875
-- **Total duration cost:** $0.00000946
-- **Total request cost (9 requests):** $0.0000018
-- **Grand total:** **$0.00001126** (about **$0.000011**)
-
-## Key Insights:
-1. **These 9 most expensive invocations cost about $0.00001** total
-2. The longest execution (1.115 seconds) cost $0.0000025
-3. Your Lambda function is very cost-efficient!
-4. Even if you had 1000 similar invocations per month, it would cost ~$0.25
-
-The costs are extremely low because:
-- You're using minimal memory (128 MB)
-- Execution times are reasonable (under 1.2 seconds)
-- Lambda pricing is very granular and cost-effective for small workloads
+| 
 
 ---
 

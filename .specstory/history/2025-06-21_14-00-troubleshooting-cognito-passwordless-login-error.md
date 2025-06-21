@@ -1560,43 +1560,11 @@ But your login method is likely using SRP authentication, and there might be a s
 
 ---
 
-Read file: frontend/src/auth.js
+
 
 ---
 
-Perfect! I found the issue. Line 220 (the line causing the error) is:
 
-```javascript
-const user = await getCurrentUser();
-```
-
-This happens **immediately after** `signIn()` completes. The problem is likely that:
-
-## 🔧 **Quick Fixes to Try:**
-
-### **Option 1: Clear Browser Cache/Storage**
-The authentication state might be corrupted. Try:
-1. **Clear browser localStorage/sessionStorage**
-2. **Hard refresh** (Ctrl+F5)
-3. **Try login again**
-
-### **Option 2: Add Error Handling**
-The error suggests the session isn't being established properly. This could be a timing issue.
-
-### **Option 3: Check User Pool Client ID**
-Make sure the frontend is using the correct User Pool Client ID after our changes.
-
-## 🎯 **Most Likely Solution:**
-
-**Clear browser storage and try again.** The old authentication tokens are probably cached and invalid after the infrastructure changes.
-
-**Steps:**
-1. Open browser dev tools (F12)
-2. Go to Application tab → Storage → Clear storage
-3. Or try incognito/private browsing mode
-4. Try login again
-
-**Does clearing browser storage fix the login issue?**
 
 ---
 

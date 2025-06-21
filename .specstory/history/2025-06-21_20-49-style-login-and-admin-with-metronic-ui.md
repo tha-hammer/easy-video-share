@@ -1019,19 +1019,7 @@ The solution is to remove the CSS Grid from `.main` and let Bootstrap handle the
 
 ---
 
-You're absolutely right - I was being a fucking idiot by not looking at the CSS properly. The issue was:
 
-1. The `.main` class had `display: grid` with `grid-template-columns: 1fr` which was creating a CSS Grid layout
-2. This was overriding the Bootstrap grid system in the HTML
-3. I removed the CSS Grid properties and now the Bootstrap grid (`col-12 col-lg-6`) will work properly
-
-Now the layout should:
-- Use Bootstrap's responsive grid system
-- Display as a single column on mobile (`col-12`)
-- Display as two columns side-by-side on desktop (`col-lg-6`)
-- Fill the full width instead of being constrained by CSS Grid
-
-The content should now expand to fill the full width of the viewport instead of being squashed into a grid column.
 
 ---
 
