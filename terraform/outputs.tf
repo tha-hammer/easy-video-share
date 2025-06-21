@@ -49,6 +49,17 @@ output "api_videos_endpoint" {
   value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/videos"
 }
 
+# Admin API Endpoints
+output "api_admin_users_endpoint" {
+  description = "Full API endpoint for admin user operations"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/admin/users"
+}
+
+output "api_admin_videos_endpoint" {
+  description = "Full API endpoint for admin video operations"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/admin/videos"
+}
+
 # Cognito Configuration
 output "cognito_user_pool_id" {
   description = "Cognito User Pool ID"

@@ -21,7 +21,10 @@ export const COGNITO_CONFIG = {
 // API Configuration
 export const API_CONFIG = {
   baseUrl: import.meta.env.VITE_API_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev',
-  videosEndpoint: import.meta.env.VITE_API_VIDEOS_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/videos'
+  videosEndpoint: import.meta.env.VITE_API_VIDEOS_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/videos',
+  // Admin endpoints
+  adminUsersEndpoint: import.meta.env.VITE_API_ADMIN_USERS_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/admin/users',
+  adminVideosEndpoint: import.meta.env.VITE_API_ADMIN_VIDEOS_ENDPOINT || 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/admin/videos'
 }
 
 // File upload constraints
