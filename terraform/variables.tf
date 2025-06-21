@@ -27,4 +27,10 @@ variable "project_name" {
   description = "Name of the project"
   type        = string
   default     = "easy-video-share"
+}
+
+variable "domain_name" {
+  description = "Domain name for the application (optional)"
+  type        = string
+  default     = ""
 } 

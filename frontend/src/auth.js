@@ -1,6 +1,6 @@
 // Authentication module using AWS Amplify
 import { Amplify } from 'aws-amplify';
-import { signUp, signIn, signOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, fetchUserAttributes } from 'aws-amplify/auth';
+import { signUp, signIn, signOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, fetchUserAttributes, confirmSignIn } from 'aws-amplify/auth';
 import { COGNITO_CONFIG } from './config.js';
 
 // Configure Amplify
@@ -343,6 +343,90 @@ class AuthManager {
     } catch (error) {
       console.error('Error fetching user attributes:', error);
       return null;
+    }
+  }
+
+  // Start passwordless login flow
+  async startPasswordlessLogin(email) {
+    try {
+      // Generate the same username from email
+      const username = email.replace(/[@.]/g, '_').toLowerCase();
+      
+      const result = await signIn({
+        username: username,
+        options: {
+          authFlowType: 'CUSTOM_AUTH'
+        }
+      });
+
+      console.log('Passwordless login started:', result);
+
+      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE') {
+        return {
+          success: true,
+          message: 'Please check your email for the login code.',
+          challengeType: 'CUSTOM_CHALLENGE',
+          nextStep: result.nextStep
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Unexpected response from passwordless login'
+      };
+    } catch (error) {
+      console.error('Passwordless login error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // Complete passwordless login with OTP
+  async completePasswordlessLogin(otp) {
+    try {
+      const result = await confirmSignIn({
+        challengeResponse: otp
+      });
+
+      console.log('Passwordless login result:', result);
+
+      if (result.isSignedIn) {
+        // Get user info and session
+        const user = await getCurrentUser();
+        const session = await fetchAuthSession();
+
+        this.currentUser = user;
+        this.isAuthenticated = true;
+        this.accessToken = session.tokens?.accessToken?.toString();
+        this.idToken = session.tokens?.idToken?.toString();
+
+        // Check admin status
+        await this.checkAdminStatus();
+
+        console.log('Passwordless login successful:', user.username);
+        console.log('Is Admin:', this.isAdmin);
+        
+        this.notify();
+
+        return {
+          success: true,
+          message: 'Login successful!',
+          user: user
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Authentication incomplete'
+      };
+    } catch (error) {
+      console.error('Passwordless OTP verification error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 }
