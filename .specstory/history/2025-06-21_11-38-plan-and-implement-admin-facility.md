@@ -2973,6 +2973,158 @@ at HTMLButtonElement.onclick (http://localhost:5173/:1:9)
 
 _**Assistant**_
 
+Excellent! The admin video listing is now working correctly - users with videos are showing their videos. Now we have a new issue with the video player modal in the admin interface.
+
+The error indicates that the `openVideoModal` function is trying to set `textContent` on a null element, which means the modal HTML structure doesn't exist when called from the admin interface.
+
+Let me check the modal structure and fix this:
+
+---
+
+<details>
+            <summary>Grep search for "openVideoModal" • **4** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L907 | `<button class="play-btn" onclick="openVideoModal('${video.videoUrl}', '${video.title}')">` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L916 | `function openVideoModal(videoUrl, title) {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L939 | `window.openVideoModal = openVideoModal;` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L1161 | `// Make openVideoModal available globally for onclick handlers` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L1162 | `window.openVideoModal = openVideoModal` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/admin.js` | L420 | `if (typeof openVideoModal === 'function') {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/admin.js` | L421 | `openVideoModal(playableUrl, title);` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L907 | `<button class="play-btn" onclick="openVideoModal('${video.videoUrl}', '${video.title}')">` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L916 | `function openVideoModal(videoUrl, title) {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L939 | `window.openVideoModal = openVideoModal;` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L1161 | `// Make openVideoModal available globally for onclick handlers` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L1162 | `window.openVideoModal = openVideoModal` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/admin.js` | L420 | `if (typeof openVideoModal === 'function') {` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/admin.js` | L421 | `openVideoModal(playableUrl, title);` |
+
+</details>
+
+---
+
+Read file: frontend/src/main.js
+
+---
+
+Now let me check what modal HTML structure exists in the main app vs the admin dashboard:
+
+---
+
+<details>
+            <summary>Grep search for "video-modal" • **2** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L208 | `<div id="video-modal" class="modal hidden">` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L257 | `const modal = document.getElementById('video-modal')` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L917 | `const modal = document.getElementById('video-modal')` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L930 | `const modal = document.getElementById('video-modal')` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L208 | `<div id="video-modal" class="modal hidden">` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L257 | `const modal = document.getElementById('video-modal')` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L917 | `const modal = document.getElementById('video-modal')` |
+| `file:///e%3A/Dev/easy-video-share/frontend/src/main.js` | L930 | `const modal = document.getElementById('video-modal')` |
+
+</details>
+
+---
+
+Read file: frontend/src/main.js
+
+---
+
+Perfect! I found the issue. The problem is that:
+
+1. **Main app** has the modal HTML in `getMainAppHTML()` (lines 208-216)
+2. **Admin dashboard** replaces the entire `#app` container content with `getAdminHTML()` 
+3. **Admin dashboard** doesn't include the modal HTML in its structure
+4. When `openVideoModal()` is called from admin, it can't find the modal elements
+
+The fix is to add the modal HTML to the admin dashboard. Let me modify the admin HTML to include the modal:
+
+---
+
+
+
+---
+
+Now I need to add the modal event listeners to the admin dashboard setup:
+
+---
+
+
+
+---
+
+Now let me also fix the S3 URL conversion in the admin `playVideo` function. Looking at the code, it's trying to convert an S3 bucket location to a proper HTTPS URL, but the logic seems off:
+
+---
+
+Read file: frontend/src/admin.js
+
+---
+
+I found the issue in the `playVideo` function! The S3 URL conversion logic is wrong. Let me check what format the `bucket_location` is actually in, and fix the URL conversion. Looking at the video upload code, the `bucket_location` should be something like `videos/filename.mp4`, not an S3 URL.
+
+Let me fix the URL construction:
+
+---
+
+
+
+---
+
+Now let's rebuild and test the admin video player:
+
+---
+
+```bash
+cd frontend && npm run build
+```
+
+---
+
+_**User**_
+
+local build successful player works on local.
+
+---
+
+_**Assistant**_
+
+Excellent! The admin video player is now working on your local development environment. Let's deploy the updated frontend to S3 so the live version also has the working admin functionality.
+
+---
+
+```bash
+cd scripts && ./deploy-frontend.sh
+```
+
+---
+
+_**User**_
+
+waiting for the deploy to propagate.
+There is an issue with the main user view.
+On login the user email shows and if admin, the Admin button shows.
+On return to main user view, user shows default 'user@example.com' and Admin button does not show
+
+---
+
+_**Assistant**_
+
+I see the issue! When returning from the admin dashboard to the main user view, the user information and admin button visibility aren't being properly restored. This is happening in the `backToMainApp()` function in the admin module.
+
+Let me check the current implementation and fix it:
+
+---
+
+Read file: frontend/src/admin.js
+
+---
+
 
 
 ---
